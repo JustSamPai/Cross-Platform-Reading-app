@@ -1,24 +1,26 @@
-# Flutter Reading Habit and Quiz App
+# ReadFlow
 
-A cross-platform Flutter app concept for tracking reading progress, building reading habits, and testing comprehension with quizzes.
+ReadFlow is a cross-platform Flutter app for tracking reading progress, daily reading habits, comprehension quizzes, and PDF study notes.
 
-This project is a cleaned portfolio version of an older university cross-platform app. The original code included reading pages, quiz screens, PDF utilities, Hive local storage, habit tiles, and streak tracking. This version restructures that idea into a clearer, recruiter-friendly project.
+The project is structured as a portfolio-ready rewrite of a university reading app prototype. It keeps the same core feature set while presenting the code in a cleaner feature-based architecture.
 
 ## Features
 
-- Reading dashboard with current books and progress
-- Habit and streak tracking
-- Quiz screen for comprehension practice
-- PDF reader placeholder for future document support
-- Local-first architecture designed for Hive persistence
-- Modular feature-based folder structure
+- Reading dashboard with active books, page progress, and topic tags
+- Hive-backed habit tracker with streaks, daily targets, completion state, and an activity heat map
+- Quiz flow with scoring, XP rewards, level progress, and completed-quiz tracking
+- PDF / EPUB import library with search, delete, and native PDF preview support on Android and iOS
+- Platform-safe document reader fallbacks for web and desktop builds
+- Responsive navigation for mobile and wider web/desktop layouts
 
 ## Tech Stack
 
-- Flutter
-- Dart
-- Hive / Hive Flutter for local persistence
-- Material Design
+- Flutter and Dart
+- Material 3
+- Hive / Hive Flutter
+- File Picker
+- Flutter PDFView
+- Flutter test and model tests
 
 ## Project Structure
 
@@ -27,44 +29,30 @@ lib/
   app/
     reading_app.dart
   core/
+    storage/
     theme/
-      app_theme.dart
+    widgets/
   features/
     habits/
+      data/
       models/
       pages/
+      widgets/
     library/
       data/
       models/
       pages/
     pdf/
       pages/
+      widgets/
     quiz/
+      data/
       models/
       pages/
+test/
 ```
-
-## Why This Project Is Portfolio-Worthy
-
-This app demonstrates:
-
-- cross-platform mobile development
-- stateful UI design
-- local data modelling
-- feature-based architecture
-- habit/streak logic
-- quiz interaction flow
-- product thinking around reading and learning
 
 ## Running Locally
-
-If this folder does not yet contain Flutter platform folders such as `android/`,
-`ios/`, `web/`, `windows/`, `macos/`, or `linux/`, generate them from inside
-the project folder:
-
-```bash
-flutter create .
-```
 
 Install dependencies:
 
@@ -72,32 +60,50 @@ Install dependencies:
 flutter pub get
 ```
 
-Run the app:
+Run on the default connected device:
 
 ```bash
 flutter run
 ```
 
-## Screenshots
+Run on Chrome:
 
-Add screenshots here once the app is running:
-
-```text
-docs/screenshots/dashboard.png
-docs/screenshots/quiz.png
-docs/screenshots/habits.png
-docs/screenshots/pdf-reader.png
+```bash
+flutter run -d chrome
 ```
+
+Run on Firefox or another browser:
+
+```bash
+flutter run -d web-server --web-port 8080
+```
+
+Then open `http://localhost:8080` in that browser.
+
+If a release web build is blocked by Windows Application Control at Flutter's
+`font-subset.exe` step, build with:
+
+```bash
+flutter build web --no-tree-shake-icons
+```
+
+## Quality Checks
+
+```bash
+dart analyze
+flutter test
+```
+
+## Portfolio Highlights
+
+- Separates app bootstrap, theme, storage, feature data, models, and pages
+- Replaces starter-template tests with tests for the actual app and domain logic
+- Uses sample data so reviewers can understand the product immediately
+- Preserves the original university app behavior with typed models, stores, and tests
 
 ## Roadmap
 
-- Add Hive adapters for books, reading sessions, habits, and quiz results
-- Add PDF file picker and PDF viewer integration
-- Persist reading streaks locally
-- Add quiz score history
-- Add tests for streak calculation and quiz scoring
-- Add screenshots and a short demo GIF
-
-## Portfolio Summary
-
-This app started as a university cross-platform application and has been refactored into a clearer mobile portfolio project. The goal is to show practical Flutter development, clean structure, and a product idea that can grow into a real learning tool.
+- Add Hive adapters if the stored models become more complex
+- Add full text extraction/search inside PDF contents
+- Add a dedicated EPUB renderer
+- Add screenshots or a short demo GIF for the GitHub README

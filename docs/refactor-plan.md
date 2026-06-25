@@ -1,34 +1,19 @@
-# Refactor Plan
+# Portfolio Refactor Notes
 
-Use this checklist to turn the old cross-platform app into a polished portfolio repo.
+This repo has been reshaped from a university prototype into a focused Flutter portfolio project.
 
-## Phase 1: Clean Packaging
+## Completed
 
-- Create a fresh Flutter project.
-- Move old `main.dart`, `pages/`, `data/`, and `utilities/` files into `lib/`.
-- Rename `utilites` to `utilities` if keeping the old folder.
-- Remove generated build files and IDE metadata.
-- Add a real `README.md`.
-- Add screenshots.
+- Moved the app into a feature-based `lib/` structure.
+- Added a shared app theme, storage bootstrap, and page frame widget.
+- Rebuilt the app shell with responsive Material 3 navigation.
+- Split sample data away from page widgets.
+- Replaced generated counter tests with app and model tests.
+- Updated README and web metadata for a portfolio presentation.
 
-## Phase 2: Improve Architecture
+## Next Improvements
 
-- Split features into `library`, `quiz`, `habits`, and `pdf`.
-- Keep models separate from UI widgets.
-- Move Hive logic into repository/service classes.
-- Avoid business logic directly inside widgets.
-
-## Phase 3: Portfolio Polish
-
-- Add a clean home dashboard.
-- Add sample data so the app looks useful immediately.
-- Add a short demo GIF.
-- Add tests for quiz scoring and streak calculation.
-- Add a "What I learned" section to the README.
-
-## Phase 4: Future AI Extension
-
-- Generate quiz questions from selected reading material.
-- Summarise PDF chapters.
-- Track topics the user struggles with.
-- Recommend review sessions based on quiz history.
+- Add screenshots or a short demo GIF to the README.
+- Persist books, habits, reading sessions, and quiz attempts with Hive adapters.
+- Connect PDF import/search to a real document viewer package.
+- Add streak history and quiz score history screens.

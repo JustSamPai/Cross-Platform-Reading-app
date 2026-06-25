@@ -1,27 +1,19 @@
 # Original Project Audit
 
-The original university app appeared to include:
+The original cross-platform reading app included a reading home page, quiz flow, page switching, habit/streak data, PDF utilities, and Hive setup.
 
-- `main.dart`
-- pages for home, quiz, switching between screens, and a second page
-- data files for date and streak storage
-- utilities for PDF viewing/search, habit tiles, floating action buttons, quiz widgets, and streak maps
-- Hive local database setup
+The portfolio version keeps those ideas but organizes them around a cleaner product surface:
 
-The portfolio version should not simply publish the old folder as-is. A stronger presentation is to repackage it into a clean Flutter project with:
+- `library` for books and reading progress
+- `habits` for targets, streaks, and daily completion
+- `quiz` for comprehension practice
+- `pdf` for document study interactions
+- `core` for theme, storage, and shared layout
 
-- a clear app name
-- a proper README
-- screenshots
-- feature-based folders
-- setup instructions
-- local data model documentation
-- tests for the most important logic
-
-## Suggested GitHub Description
+## Portfolio Description
 
 Cross-platform Flutter app for reading progress, habit streaks, PDF study, and quiz-based comprehension practice.
 
-## Suggested Pinned Repo Name
+## Suggested Repo Name
 
 `flutter-reading-habit-and-quiz-app`

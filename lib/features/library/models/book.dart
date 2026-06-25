@@ -17,6 +17,11 @@ class Book {
     if (totalPages == 0) {
       return 0;
     }
-    return currentPage / totalPages;
+    return (currentPage / totalPages).clamp(0, 1).toDouble();
   }
+
+  int get progressPercent => (progress * 100).round();
+
+  int get remainingPages =>
+      (totalPages - currentPage).clamp(0, totalPages).toInt();
 }

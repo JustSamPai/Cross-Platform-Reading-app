@@ -3,13 +3,25 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('isCorrect returns true for the correct answer', () {
-    const question = QuizQuestion(
+    final question = QuizQuestion(
       prompt: 'Example?',
-      answers: ['A', 'B'],
+      answers: const ['A', 'B'],
       correctIndex: 1,
     );
 
     expect(question.isCorrect(1), isTrue);
     expect(question.isCorrect(0), isFalse);
+    expect(question.correctAnswer, 'B');
+  });
+
+  test('requires the correct answer index to exist', () {
+    expect(
+      () => QuizQuestion(
+        prompt: 'Broken?',
+        answers: const ['A', 'B'],
+        correctIndex: 2,
+      ),
+      throwsAssertionError,
+    );
   });
 }

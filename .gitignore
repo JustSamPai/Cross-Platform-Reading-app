@@ -10,4 +10,3 @@ android/.gradle/
 ios/Pods/
 macos/Pods/
 coverage/
-*.lock
