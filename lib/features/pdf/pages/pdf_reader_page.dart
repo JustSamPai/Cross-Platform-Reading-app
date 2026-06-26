@@ -7,6 +7,7 @@ import '../../library/models/reading_document.dart';
 import 'book_progress_page.dart';
 import 'document_reader_page.dart';
 import 'epub_reader_page.dart';
+import 'external_novel_reader_page.dart';
 
 class PdfReaderPage extends StatefulWidget {
   const PdfReaderPage({super.key});
@@ -124,6 +125,8 @@ class _PdfReaderPageState extends State<PdfReaderPage> {
           return switch (document.type) {
             ReadingDocumentType.pdf => DocumentReaderPage(document: document),
             ReadingDocumentType.epub => EpubReaderPage(document: document),
+            ReadingDocumentType.webNovel =>
+              ExternalNovelReaderPage(document: document),
             ReadingDocumentType.book ||
             ReadingDocumentType.other =>
               BookProgressPage(document: document),
@@ -163,9 +166,7 @@ class _DocumentTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         leading: Icon(
-          document.type == ReadingDocumentType.epub
-              ? Icons.menu_book_outlined
-              : Icons.picture_as_pdf_outlined,
+          _iconFor(document.type),
           color: colorScheme.primary,
         ),
         title: Text(document.title),
@@ -188,6 +189,16 @@ class _DocumentTile extends StatelessWidget {
             ? 'ready'
             : 'tracked';
     return '${document.type.label} - $progress - $notes';
+  }
+
+  IconData _iconFor(ReadingDocumentType type) {
+    return switch (type) {
+      ReadingDocumentType.pdf => Icons.picture_as_pdf_outlined,
+      ReadingDocumentType.epub => Icons.menu_book_outlined,
+      ReadingDocumentType.webNovel => Icons.public,
+      ReadingDocumentType.book => Icons.auto_stories_outlined,
+      ReadingDocumentType.other => Icons.insert_drive_file_outlined,
+    };
   }
 }
 

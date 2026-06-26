@@ -3,15 +3,18 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import '../../../core/storage/reading_storage.dart';
 import '../../../core/widgets/page_frame.dart';
+import '../../extensions/pages/extensions_page.dart';
 import '../../habits/data/reading_habit_store.dart';
 import '../../habits/pages/habits_page.dart';
 import '../../pdf/pages/book_progress_page.dart';
 import '../../pdf/pages/document_reader_page.dart';
 import '../../pdf/pages/epub_reader_page.dart';
+import '../../pdf/pages/external_novel_reader_page.dart';
 import '../../pdf/pages/pdf_reader_page.dart';
 import '../data/document_importer.dart';
 import '../data/library_store.dart';
 import '../../quiz/pages/quiz_page.dart';
+import '../../settings/pages/settings_page.dart';
 import '../models/reading_document.dart';
 
 class HomePage extends StatefulWidget {
@@ -29,6 +32,7 @@ class _HomePageState extends State<HomePage> {
     HabitsPage(),
     QuizPage(),
     PdfReaderPage(),
+    ExtensionsPage(),
   ];
 
   static const _destinations = [
@@ -52,6 +56,11 @@ class _HomePageState extends State<HomePage> {
       icon: Icons.picture_as_pdf_outlined,
       selectedIcon: Icons.picture_as_pdf,
     ),
+    _AppDestination(
+      label: 'Extensions',
+      icon: Icons.extension_outlined,
+      selectedIcon: Icons.extension,
+    ),
   ];
 
   @override
@@ -61,6 +70,13 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('ReadFlow'),
+        actions: [
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings_outlined),
+          ),
+        ],
       ),
       body: Row(
         children: [
@@ -108,6 +124,13 @@ class _HomePageState extends State<HomePage> {
 
   void _selectDestination(int index) {
     setState(() => selectedIndex = index);
+  }
+
+  Future<void> _openSettings() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SettingsPage()),
+    );
   }
 }
 
@@ -173,10 +196,14 @@ class _LibraryDashboardState extends State<_LibraryDashboard> {
           return document.progress >= 1 && document.pageCount > 0;
         }).length;
         final importCount = documents.where((document) {
-          return document.type != ReadingDocumentType.book;
+          return document.type != ReadingDocumentType.book &&
+              document.type != ReadingDocumentType.webNovel;
         }).length;
         final manualBookCount = documents.where((document) {
           return document.type == ReadingDocumentType.book;
+        }).length;
+        final webNovelCount = documents.where((document) {
+          return document.type == ReadingDocumentType.webNovel;
         }).length;
         final mostRecent = documents.fold<DateTime?>(
           null,
@@ -226,7 +253,8 @@ class _LibraryDashboardState extends State<_LibraryDashboard> {
                     icon: Icons.auto_stories_outlined,
                     label: 'Library items',
                     value: '${documents.length}',
-                    detail: '$manualBookCount books / $importCount imports',
+                    detail:
+                        '$manualBookCount books / $webNovelCount web / $importCount files',
                   ),
                   _DashboardStat(
                     icon: Icons.timeline_outlined,
@@ -330,6 +358,8 @@ class _LibraryDashboardState extends State<_LibraryDashboard> {
           return switch (document.type) {
             ReadingDocumentType.pdf => DocumentReaderPage(document: document),
             ReadingDocumentType.epub => EpubReaderPage(document: document),
+            ReadingDocumentType.webNovel =>
+              ExternalNovelReaderPage(document: document),
             ReadingDocumentType.book ||
             ReadingDocumentType.other =>
               BookProgressPage(document: document),
@@ -501,6 +531,7 @@ class _LibraryDocumentCard extends StatelessWidget {
     return switch (type) {
       ReadingDocumentType.pdf => Icons.picture_as_pdf_outlined,
       ReadingDocumentType.epub => Icons.menu_book_outlined,
+      ReadingDocumentType.webNovel => Icons.public,
       ReadingDocumentType.book => Icons.auto_stories_outlined,
       ReadingDocumentType.other => Icons.insert_drive_file_outlined,
     };

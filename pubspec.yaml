@@ -14,6 +14,8 @@ dependencies:
     sdk: flutter
   hive: ^2.2.3
   hive_flutter: ^1.1.0
+  html: ^0.15.6
+  http: ^1.6.0
   path: ^1.9.1
   syncfusion_flutter_pdfviewer: ^33.2.13
 

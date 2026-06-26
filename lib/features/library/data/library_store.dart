@@ -32,7 +32,10 @@ class LibraryStore {
     final alreadyImported = docs.any(
       (stored) =>
           (document.filePath != null && stored.filePath == document.filePath) ||
+          (document.sourceUrl != null &&
+              stored.sourceUrl == document.sourceUrl) ||
           (document.filePath == null &&
+              document.sourceUrl == null &&
               stored.title == document.title &&
               stored.type == document.type),
     );
@@ -101,6 +104,24 @@ class LibraryStore {
     docs[index] = docs[index].copyWith(
       lastPageNumber: currentPage.clamp(0, totalPages).toInt(),
       pageCount: totalPages,
+      lastOpenedAt: DateTime.now(),
+    );
+    _saveDocuments(docs);
+    return docs[index];
+  }
+
+  ReadingDocument? updateDocumentSourceText(
+    String id, {
+    required String sourceText,
+  }) {
+    final docs = documents().toList();
+    final index = docs.indexWhere((document) => document.id == id);
+    if (index == -1) {
+      return null;
+    }
+
+    docs[index] = docs[index].copyWith(
+      sourceText: sourceText,
       lastOpenedAt: DateTime.now(),
     );
     _saveDocuments(docs);

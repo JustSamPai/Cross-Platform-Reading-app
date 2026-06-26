@@ -6,6 +6,7 @@ enum ReadingDocumentType {
   pdf,
   epub,
   book,
+  webNovel,
   other;
 
   String get label {
@@ -13,6 +14,7 @@ enum ReadingDocumentType {
       ReadingDocumentType.pdf => 'PDF',
       ReadingDocumentType.epub => 'EPUB',
       ReadingDocumentType.book => 'Book',
+      ReadingDocumentType.webNovel => 'Web Novel',
       ReadingDocumentType.other => 'File',
     };
   }
@@ -40,6 +42,10 @@ class ReadingDocument {
     this.epubCfi,
     this.bytes,
     this.filePath,
+    this.sourceUrl,
+    this.sourceName,
+    this.sourceText,
+    this.coverUrl,
   });
 
   final String id;
@@ -53,10 +59,18 @@ class ReadingDocument {
   final String? epubCfi;
   final Uint8List? bytes;
   final String? filePath;
+  final String? sourceUrl;
+  final String? sourceName;
+  final String? sourceText;
+  final String? coverUrl;
 
   bool get canOpenInApp =>
-      bytes != null &&
-      (type == ReadingDocumentType.pdf || type == ReadingDocumentType.epub);
+      (bytes != null &&
+          (type == ReadingDocumentType.pdf ||
+              type == ReadingDocumentType.epub)) ||
+      (type == ReadingDocumentType.webNovel &&
+          ((sourceUrl?.isNotEmpty ?? false) ||
+              (sourceText?.isNotEmpty ?? false)));
 
   double get progress {
     if (pageCount <= 0) {
@@ -69,9 +83,16 @@ class ReadingDocument {
 
   String get progressLabel {
     if (pageCount <= 0) {
-      return type == ReadingDocumentType.book
-          ? 'No pages logged'
-          : 'Not started';
+      return switch (type) {
+        ReadingDocumentType.book => 'No pages logged',
+        ReadingDocumentType.webNovel =>
+          sourceName == null ? 'Saved source' : 'Saved from $sourceName',
+        _ => 'Not started',
+      };
+    }
+
+    if (type == ReadingDocumentType.webNovel && pageCount == 1) {
+      return lastPageNumber >= 1 ? 'Read' : 'Unread';
     }
 
     return 'Page $lastPageNumber of $pageCount';
@@ -89,6 +110,10 @@ class ReadingDocument {
     String? epubCfi,
     Uint8List? bytes,
     String? filePath,
+    String? sourceUrl,
+    String? sourceName,
+    String? sourceText,
+    String? coverUrl,
   }) {
     return ReadingDocument(
       id: id ?? this.id,
@@ -102,6 +127,10 @@ class ReadingDocument {
       epubCfi: epubCfi ?? this.epubCfi,
       bytes: bytes ?? this.bytes,
       filePath: filePath ?? this.filePath,
+      sourceUrl: sourceUrl ?? this.sourceUrl,
+      sourceName: sourceName ?? this.sourceName,
+      sourceText: sourceText ?? this.sourceText,
+      coverUrl: coverUrl ?? this.coverUrl,
     );
   }
 
@@ -118,6 +147,10 @@ class ReadingDocument {
       'epubCfi': epubCfi,
       'bytes': bytes,
       'filePath': filePath,
+      'sourceUrl': sourceUrl,
+      'sourceName': sourceName,
+      'sourceText': sourceText,
+      'coverUrl': coverUrl,
     };
   }
 
@@ -145,6 +178,10 @@ class ReadingDocument {
               ? Uint8List.fromList(rawBytes)
               : null,
       filePath: map['filePath'] as String?,
+      sourceUrl: map['sourceUrl'] as String?,
+      sourceName: map['sourceName'] as String?,
+      sourceText: map['sourceText'] as String?,
+      coverUrl: map['coverUrl'] as String?,
     );
   }
 
@@ -177,6 +214,29 @@ class ReadingDocument {
       addedAt: DateTime.now(),
       lastPageNumber: currentPage.clamp(0, totalPages).toInt(),
       pageCount: totalPages,
+    );
+  }
+
+  factory ReadingDocument.externalNovel({
+    required String title,
+    required String sourceUrl,
+    required String sourceName,
+    String author = '',
+    String? description,
+    String? coverUrl,
+  }) {
+    return ReadingDocument(
+      id: '${DateTime.now().microsecondsSinceEpoch}-$title',
+      title: title,
+      author: author.isEmpty ? null : author,
+      type: ReadingDocumentType.webNovel,
+      addedAt: DateTime.now(),
+      lastPageNumber: 0,
+      pageCount: 1,
+      sourceUrl: sourceUrl,
+      sourceName: sourceName,
+      sourceText: description,
+      coverUrl: coverUrl,
     );
   }
 }

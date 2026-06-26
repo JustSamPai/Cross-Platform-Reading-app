@@ -84,4 +84,24 @@ void main() {
     expect(documents.first.author, 'Martin Kleppmann');
     expect(documents.first.progressPercent, 20);
   });
+
+  test('persists external web novels', () {
+    final store = LibraryStore(box: box);
+    final novel = ReadingDocument.externalNovel(
+      title: 'A Remote Chapter',
+      sourceUrl: 'https://example.com/novel/chapter-1',
+      sourceName: 'Example Source',
+      description: 'Opening scene',
+    );
+
+    final documents = store.addDocument(novel);
+    final updated = store.updateDocumentSourceText(
+      documents.first.id,
+      sourceText: 'A readable chapter snapshot.',
+    );
+
+    expect(documents.first.type, ReadingDocumentType.webNovel);
+    expect(documents.first.canOpenInApp, isTrue);
+    expect(updated?.sourceText, contains('readable chapter'));
+  });
 }
