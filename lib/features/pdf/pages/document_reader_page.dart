@@ -227,6 +227,12 @@ class _DocumentReaderPageState extends State<DocumentReaderPage> {
         : pdfController.pageNumber;
 
     setState(() {
+      document = store.updateDocumentProgress(
+            document.id,
+            pageNumber: loadedPage,
+            pageCount: totalPages,
+          ) ??
+          document.copyWith(pageCount: totalPages);
       pageCount = totalPages;
       currentPage = loadedPage;
       _syncPageController(currentPage);
@@ -241,6 +247,7 @@ class _DocumentReaderPageState extends State<DocumentReaderPage> {
     final updatedDocument = store.updateDocumentProgress(
       document.id,
       pageNumber: details.newPageNumber,
+      pageCount: pageCount,
     );
 
     setState(() {
@@ -517,23 +524,43 @@ class _ReaderStatusBar extends StatelessWidget {
             ? Icons.edit_note
             : Icons.cloud_done_outlined;
 
+    final progress = pageCount <= 0 ? 0.0 : currentPage / pageCount;
+
     return Material(
       color: Theme.of(context).colorScheme.surface,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _StatusChip(
-              icon: Icons.description_outlined,
-              label: '$currentPage / ${pageCount == 0 ? '-' : pageCount}',
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _StatusChip(
+                  icon: Icons.description_outlined,
+                  label: '$currentPage / ${pageCount == 0 ? '-' : pageCount}',
+                ),
+                _StatusChip(
+                  icon: Icons.timeline_outlined,
+                  label: '${(progress * 100).clamp(0, 100).round()}%',
+                ),
+                _StatusChip(
+                  icon: Icons.sticky_note_2_outlined,
+                  label: noteCount == 1 ? '1 note' : '$noteCount notes',
+                ),
+                _StatusChip(icon: saveIcon, label: saveLabel),
+              ],
             ),
-            _StatusChip(
-              icon: Icons.sticky_note_2_outlined,
-              label: noteCount == 1 ? '1 note' : '$noteCount notes',
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                minHeight: 8,
+                value: progress.clamp(0, 1).toDouble(),
+              ),
             ),
-            _StatusChip(icon: saveIcon, label: saveLabel),
           ],
         ),
       ),

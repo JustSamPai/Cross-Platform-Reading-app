@@ -68,6 +68,8 @@ class LibraryStore {
   ReadingDocument? updateDocumentProgress(
     String id, {
     required int pageNumber,
+    int? pageCount,
+    String? epubCfi,
   }) {
     final docs = documents().toList();
     final index = docs.indexWhere((document) => document.id == id);
@@ -77,6 +79,28 @@ class LibraryStore {
 
     docs[index] = docs[index].copyWith(
       lastPageNumber: pageNumber,
+      pageCount: pageCount,
+      lastOpenedAt: DateTime.now(),
+      epubCfi: epubCfi,
+    );
+    _saveDocuments(docs);
+    return docs[index];
+  }
+
+  ReadingDocument? updateManualBookProgress(
+    String id, {
+    required int currentPage,
+    required int totalPages,
+  }) {
+    final docs = documents().toList();
+    final index = docs.indexWhere((document) => document.id == id);
+    if (index == -1) {
+      return null;
+    }
+
+    docs[index] = docs[index].copyWith(
+      lastPageNumber: currentPage.clamp(0, totalPages).toInt(),
+      pageCount: totalPages,
       lastOpenedAt: DateTime.now(),
     );
     _saveDocuments(docs);

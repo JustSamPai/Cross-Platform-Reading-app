@@ -1,12 +1,12 @@
-import 'dart:typed_data';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/page_frame.dart';
+import '../../library/data/document_importer.dart';
 import '../../library/data/library_store.dart';
 import '../../library/models/reading_document.dart';
+import 'book_progress_page.dart';
 import 'document_reader_page.dart';
+import 'epub_reader_page.dart';
 
 class PdfReaderPage extends StatefulWidget {
   const PdfReaderPage({super.key});
@@ -92,26 +92,10 @@ class _PdfReaderPageState extends State<PdfReaderPage> {
   }
 
   Future<void> _importDocument() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['pdf', 'epub'],
-    );
-
-    if (result == null || result.files.isEmpty) {
+    final document = await DocumentImporter.pickDocument();
+    if (document == null) {
       return;
     }
-
-    final file = result.files.first;
-    final bytes = await _readPickedFile(file);
-    if (bytes == null) {
-      return;
-    }
-
-    final document = ReadingDocument.fromPickedFile(
-      fileName: file.name,
-      bytes: bytes,
-      filePath: file.path,
-    );
 
     if (!mounted) {
       return;
@@ -129,33 +113,22 @@ class _PdfReaderPageState extends State<PdfReaderPage> {
 
     setState(() => documents = updatedDocuments);
 
-    if (!storedDocument.canOpenInApp) {
-      final message = storedDocument.type == ReadingDocumentType.epub
-          ? 'EPUB imported and tracked. Add an EPUB renderer package to preview contents in-app.'
-          : 'PDF imported, but no bytes were provided by the picker so it cannot be opened in-app.';
-      _showMessage(message);
-      return;
-    }
-
     await _openDocument(storedDocument);
-  }
-
-  Future<Uint8List?> _readPickedFile(PlatformFile file) async {
-    try {
-      return file.readAsBytes();
-    } catch (_) {
-      if (mounted) {
-        _showMessage('Could not read the selected file');
-      }
-      return null;
-    }
   }
 
   Future<void> _openDocument(ReadingDocument document) async {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => DocumentReaderPage(document: document),
+        builder: (context) {
+          return switch (document.type) {
+            ReadingDocumentType.pdf => DocumentReaderPage(document: document),
+            ReadingDocumentType.epub => EpubReaderPage(document: document),
+            ReadingDocumentType.book ||
+            ReadingDocumentType.other =>
+              BookProgressPage(document: document),
+          };
+        },
       ),
     );
 
@@ -166,12 +139,6 @@ class _PdfReaderPageState extends State<PdfReaderPage> {
 
   void _deleteDocument(ReadingDocument document) {
     setState(() => documents = store.deleteDocument(document.id));
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
   }
 }
 
@@ -214,12 +181,13 @@ class _DocumentTile extends StatelessWidget {
   }
 
   String get _subtitle {
-    if (!document.canOpenInApp) {
-      return '${document.type.label} - tracked only';
-    }
-
     final notes = noteCount == 1 ? '1 note' : '$noteCount notes';
-    return '${document.type.label} - page ${document.lastPageNumber} - $notes';
+    final progress = document.pageCount > 0
+        ? '${document.progressPercent}%'
+        : document.canOpenInApp
+            ? 'ready'
+            : 'tracked';
+    return '${document.type.label} - $progress - $notes';
   }
 }
 

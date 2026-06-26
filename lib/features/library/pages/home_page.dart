@@ -5,11 +5,13 @@ import '../../../core/storage/reading_storage.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../../habits/data/reading_habit_store.dart';
 import '../../habits/pages/habits_page.dart';
+import '../../pdf/pages/book_progress_page.dart';
+import '../../pdf/pages/document_reader_page.dart';
+import '../../pdf/pages/epub_reader_page.dart';
 import '../../pdf/pages/pdf_reader_page.dart';
+import '../data/document_importer.dart';
 import '../data/library_store.dart';
 import '../../quiz/pages/quiz_page.dart';
-import '../data/sample_books.dart';
-import '../models/book.dart';
 import '../models/reading_document.dart';
 
 class HomePage extends StatefulWidget {
@@ -129,10 +131,24 @@ class _LibraryDashboard extends StatefulWidget {
 }
 
 class _LibraryDashboardState extends State<_LibraryDashboard> {
+  final titleController = TextEditingController();
+  final authorController = TextEditingController();
+  final totalPagesController = TextEditingController();
+  final currentPageController = TextEditingController(text: '0');
+
   @override
   void initState() {
     super.initState();
     ReadingHabitStore().ensureInitialized();
+  }
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    authorController.dispose();
+    totalPagesController.dispose();
+    currentPageController.dispose();
+    super.dispose();
   }
 
   @override
@@ -141,13 +157,36 @@ class _LibraryDashboardState extends State<_LibraryDashboard> {
       valueListenable: ReadingStorage.box.listenable(),
       builder: (context, box, _) {
         final habitStore = ReadingHabitStore(box: box);
+        final libraryStore = LibraryStore(box: box);
         final habits = habitStore.loadToday();
-        final documents = LibraryStore(box: box).documents();
+        final documents = libraryStore.documents();
         final completedHabits =
             habits.where((habit) => habit.completedToday).length;
-        final totalPagesRead = sampleBooks.fold<int>(
+        final totalPagesRead = documents.fold<int>(
           0,
-          (total, book) => total + book.currentPage,
+          (total, document) => total + document.lastPageNumber,
+        );
+        final inProgressCount = documents.where((document) {
+          return document.progress > 0 && document.progress < 1;
+        }).length;
+        final completedCount = documents.where((document) {
+          return document.progress >= 1 && document.pageCount > 0;
+        }).length;
+        final importCount = documents.where((document) {
+          return document.type != ReadingDocumentType.book;
+        }).length;
+        final manualBookCount = documents.where((document) {
+          return document.type == ReadingDocumentType.book;
+        }).length;
+        final mostRecent = documents.fold<DateTime?>(
+          null,
+          (latest, document) {
+            final openedAt = document.lastOpenedAt ?? document.addedAt;
+            if (latest == null || openedAt.isAfter(latest)) {
+              return openedAt;
+            }
+            return latest;
+          },
         );
         final longestStreak = habits.fold<int>(
           0,
@@ -160,89 +199,311 @@ class _LibraryDashboardState extends State<_LibraryDashboard> {
             padding: const EdgeInsets.all(16),
             children: [
               Text(
-                'Today',
+                'Library',
                 style: Theme.of(context).textTheme.displaySmall,
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.icon(
+                    onPressed: _importDocument,
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Import file'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _openAddBookDialog,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add book'),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               _StatGrid(
                 stats: [
                   _DashboardStat(
                     icon: Icons.auto_stories_outlined,
-                    label: 'Active books',
-                    value: '${sampleBooks.length}',
-                    detail: '$totalPagesRead pages logged',
+                    label: 'Library items',
+                    value: '${documents.length}',
+                    detail: '$manualBookCount books / $importCount imports',
+                  ),
+                  _DashboardStat(
+                    icon: Icons.timeline_outlined,
+                    label: 'Pages logged',
+                    value: '$totalPagesRead',
+                    detail: '$inProgressCount in progress',
                   ),
                   _DashboardStat(
                     icon: Icons.check_circle_outline,
-                    label: 'Habits done',
-                    value: '$completedHabits/${habits.length}',
-                    detail: 'Targets completed',
-                  ),
-                  _DashboardStat(
-                    icon: Icons.folder_copy_outlined,
-                    label: 'Documents',
-                    value: '${documents.length}',
-                    detail: 'PDF / EPUB imports',
+                    label: 'Completed',
+                    value: '$completedCount',
+                    detail: mostRecent == null
+                        ? 'No reading yet'
+                        : 'Recent activity saved',
                   ),
                   _DashboardStat(
                     icon: Icons.local_fire_department_outlined,
                     label: 'Best streak',
                     value: '$longestStreak days',
-                    detail: 'Current habit streak',
+                    detail: '$completedHabits/${habits.length} habits today',
                   ),
                 ],
               ),
               const SizedBox(height: 28),
               Text(
-                'Continue reading',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 12),
-              for (final book in sampleBooks) BookProgressCard(book: book),
-              const SizedBox(height: 16),
-              Text(
-                'Imported documents',
+                'Your books and files',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 12),
               if (documents.isEmpty)
-                const Card(
+                Card(
                   margin: EdgeInsets.zero,
                   child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('Import PDFs or EPUBs from the PDF tab.'),
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                            'Add a book or import a file to start your library.'),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            FilledButton.icon(
+                              onPressed: _importDocument,
+                              icon: const Icon(Icons.upload_file),
+                              label: const Text('Import file'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _openAddBookDialog,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add book'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 )
               else
-                for (final document in documents.take(3))
-                  _ImportedDocumentCard(document: document),
+                for (final document in documents)
+                  _LibraryDocumentCard(
+                    document: document,
+                    onOpen: () => _openDocument(document),
+                    onDelete: () => _deleteDocument(document),
+                  ),
             ],
           ),
         );
       },
     );
   }
+
+  Future<void> _importDocument() async {
+    final document = await DocumentImporter.pickDocument();
+    if (document == null || !mounted) {
+      return;
+    }
+
+    final documents = LibraryStore().addDocument(document);
+    final storedDocument = documents.firstWhere(
+      (stored) =>
+          (document.filePath != null && stored.filePath == document.filePath) ||
+          (document.filePath == null &&
+              stored.title == document.title &&
+              stored.type == document.type),
+      orElse: () => document,
+    );
+
+    if (mounted) {
+      await _openDocument(storedDocument);
+    }
+  }
+
+  Future<void> _openDocument(ReadingDocument document) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) {
+          return switch (document.type) {
+            ReadingDocumentType.pdf => DocumentReaderPage(document: document),
+            ReadingDocumentType.epub => EpubReaderPage(document: document),
+            ReadingDocumentType.book ||
+            ReadingDocumentType.other =>
+              BookProgressPage(document: document),
+          };
+        },
+      ),
+    );
+  }
+
+  void _deleteDocument(ReadingDocument document) {
+    LibraryStore().deleteDocument(document.id);
+  }
+
+  void _openAddBookDialog() {
+    titleController.clear();
+    authorController.clear();
+    totalPagesController.clear();
+    currentPageController.text = '0';
+
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Add book'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(labelText: 'Title'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: authorController,
+                  decoration: const InputDecoration(labelText: 'Author'),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: currentPageController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Current page',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: totalPagesController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Total pages',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: _saveManualBook,
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _saveManualBook() {
+    final title = titleController.text.trim();
+    if (title.isEmpty) {
+      return;
+    }
+
+    final totalPages = int.tryParse(totalPagesController.text.trim()) ?? 0;
+    final currentPage = int.tryParse(currentPageController.text.trim()) ?? 0;
+    LibraryStore().addDocument(
+      ReadingDocument.manualBook(
+        title: title,
+        author: authorController.text.trim(),
+        totalPages: totalPages,
+        currentPage: currentPage,
+      ),
+    );
+    Navigator.pop(context);
+  }
 }
 
-class _ImportedDocumentCard extends StatelessWidget {
-  const _ImportedDocumentCard({required this.document});
+class _LibraryDocumentCard extends StatelessWidget {
+  const _LibraryDocumentCard({
+    required this.document,
+    required this.onOpen,
+    required this.onDelete,
+  });
 
   final ReadingDocument document;
+  final VoidCallback onOpen;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: Icon(
-          document.type == ReadingDocumentType.epub
-              ? Icons.menu_book_outlined
-              : Icons.picture_as_pdf_outlined,
+      child: InkWell(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(_iconFor(document.type), color: colorScheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          document.title,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        if (document.author != null) Text(document.author!),
+                        Text(
+                            '${document.type.label} - ${document.progressLabel}'),
+                      ],
+                    ),
+                  ),
+                  Text('${document.progressPercent}%'),
+                  IconButton(
+                    tooltip: 'Delete',
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  minHeight: 8,
+                  value: document.progress,
+                ),
+              ),
+            ],
+          ),
         ),
-        title: Text(document.title),
-        subtitle: Text(document.type.label),
       ),
     );
+  }
+
+  IconData _iconFor(ReadingDocumentType type) {
+    return switch (type) {
+      ReadingDocumentType.pdf => Icons.picture_as_pdf_outlined,
+      ReadingDocumentType.epub => Icons.menu_book_outlined,
+      ReadingDocumentType.book => Icons.auto_stories_outlined,
+      ReadingDocumentType.other => Icons.insert_drive_file_outlined,
+    };
   }
 }
 
@@ -340,67 +601,6 @@ class _MetricCard extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class BookProgressCard extends StatelessWidget {
-  const BookProgressCard({required this.book, super.key});
-
-  final Book book;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(book.title, style: textTheme.titleMedium),
-                      const SizedBox(height: 4),
-                      Text(book.author),
-                    ],
-                  ),
-                ),
-                Text(
-                  '${book.progressPercent}%',
-                  style: textTheme.titleMedium,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                minHeight: 8,
-                value: book.progress,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-                '${book.currentPage} / ${book.totalPages} pages - ${book.remainingPages} left'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final tag in book.tags) Chip(label: Text(tag)),
-              ],
             ),
           ],
         ),

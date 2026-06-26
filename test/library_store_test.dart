@@ -55,11 +55,33 @@ void main() {
     );
 
     final storedDocument = store.addDocument(document).first;
-    store.updateDocumentProgress(storedDocument.id, pageNumber: 12);
+    store.updateDocumentProgress(
+      storedDocument.id,
+      pageNumber: 12,
+      pageCount: 24,
+    );
 
     final updatedDocument = store.documents().first;
 
     expect(updatedDocument.lastPageNumber, 12);
+    expect(updatedDocument.pageCount, 24);
+    expect(updatedDocument.progressPercent, 50);
     expect(updatedDocument.lastOpenedAt, isNotNull);
+  });
+
+  test('persists manual books', () {
+    final store = LibraryStore(box: box);
+    final book = ReadingDocument.manualBook(
+      title: 'Designing Data-Intensive Applications',
+      author: 'Martin Kleppmann',
+      totalPages: 600,
+      currentPage: 120,
+    );
+
+    final documents = store.addDocument(book);
+
+    expect(documents.first.type, ReadingDocumentType.book);
+    expect(documents.first.author, 'Martin Kleppmann');
+    expect(documents.first.progressPercent, 20);
   });
 }

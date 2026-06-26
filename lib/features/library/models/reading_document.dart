@@ -5,13 +5,15 @@ import 'package:path/path.dart' as path;
 enum ReadingDocumentType {
   pdf,
   epub,
-  unknown;
+  book,
+  other;
 
   String get label {
     return switch (this) {
       ReadingDocumentType.pdf => 'PDF',
       ReadingDocumentType.epub => 'EPUB',
-      ReadingDocumentType.unknown => 'Document',
+      ReadingDocumentType.book => 'Book',
+      ReadingDocumentType.other => 'File',
     };
   }
 
@@ -20,7 +22,7 @@ enum ReadingDocumentType {
     return switch (extension) {
       '.pdf' => ReadingDocumentType.pdf,
       '.epub' => ReadingDocumentType.epub,
-      _ => ReadingDocumentType.unknown,
+      _ => ReadingDocumentType.other,
     };
   }
 }
@@ -31,8 +33,11 @@ class ReadingDocument {
     required this.title,
     required this.type,
     required this.addedAt,
+    this.author,
     this.lastPageNumber = 1,
+    this.pageCount = 0,
     this.lastOpenedAt,
+    this.epubCfi,
     this.bytes,
     this.filePath,
   });
@@ -41,20 +46,47 @@ class ReadingDocument {
   final String title;
   final ReadingDocumentType type;
   final DateTime addedAt;
+  final String? author;
   final int lastPageNumber;
+  final int pageCount;
   final DateTime? lastOpenedAt;
+  final String? epubCfi;
   final Uint8List? bytes;
   final String? filePath;
 
-  bool get canOpenInApp => bytes != null && type == ReadingDocumentType.pdf;
+  bool get canOpenInApp =>
+      bytes != null &&
+      (type == ReadingDocumentType.pdf || type == ReadingDocumentType.epub);
+
+  double get progress {
+    if (pageCount <= 0) {
+      return 0;
+    }
+    return (lastPageNumber / pageCount).clamp(0, 1).toDouble();
+  }
+
+  int get progressPercent => (progress * 100).round();
+
+  String get progressLabel {
+    if (pageCount <= 0) {
+      return type == ReadingDocumentType.book
+          ? 'No pages logged'
+          : 'Not started';
+    }
+
+    return 'Page $lastPageNumber of $pageCount';
+  }
 
   ReadingDocument copyWith({
     String? id,
     String? title,
     ReadingDocumentType? type,
     DateTime? addedAt,
+    String? author,
     int? lastPageNumber,
+    int? pageCount,
     DateTime? lastOpenedAt,
+    String? epubCfi,
     Uint8List? bytes,
     String? filePath,
   }) {
@@ -63,8 +95,11 @@ class ReadingDocument {
       title: title ?? this.title,
       type: type ?? this.type,
       addedAt: addedAt ?? this.addedAt,
+      author: author ?? this.author,
       lastPageNumber: lastPageNumber ?? this.lastPageNumber,
+      pageCount: pageCount ?? this.pageCount,
       lastOpenedAt: lastOpenedAt ?? this.lastOpenedAt,
+      epubCfi: epubCfi ?? this.epubCfi,
       bytes: bytes ?? this.bytes,
       filePath: filePath ?? this.filePath,
     );
@@ -76,8 +111,11 @@ class ReadingDocument {
       'title': title,
       'type': type.name,
       'addedAt': addedAt.toIso8601String(),
+      'author': author,
       'lastPageNumber': lastPageNumber,
+      'pageCount': pageCount,
       'lastOpenedAt': lastOpenedAt?.toIso8601String(),
+      'epubCfi': epubCfi,
       'bytes': bytes,
       'filePath': filePath,
     };
@@ -92,12 +130,15 @@ class ReadingDocument {
       title: map['title'] as String? ?? 'Untitled document',
       type: ReadingDocumentType.values.firstWhere(
         (type) => type.name == map['type'],
-        orElse: () => ReadingDocumentType.unknown,
+        orElse: () => ReadingDocumentType.other,
       ),
       addedAt:
           DateTime.tryParse(map['addedAt'] as String? ?? '') ?? DateTime.now(),
+      author: map['author'] as String?,
       lastPageNumber: (map['lastPageNumber'] as num?)?.toInt() ?? 1,
+      pageCount: (map['pageCount'] as num?)?.toInt() ?? 0,
       lastOpenedAt: DateTime.tryParse(map['lastOpenedAt'] as String? ?? ''),
+      epubCfi: map['epubCfi'] as String?,
       bytes: rawBytes is Uint8List
           ? rawBytes
           : rawBytes is List<int>
@@ -119,6 +160,23 @@ class ReadingDocument {
       addedAt: DateTime.now(),
       bytes: bytes,
       filePath: filePath,
+    );
+  }
+
+  factory ReadingDocument.manualBook({
+    required String title,
+    required String author,
+    required int totalPages,
+    int currentPage = 0,
+  }) {
+    return ReadingDocument(
+      id: '${DateTime.now().microsecondsSinceEpoch}-$title',
+      title: title,
+      author: author.isEmpty ? null : author,
+      type: ReadingDocumentType.book,
+      addedAt: DateTime.now(),
+      lastPageNumber: currentPage.clamp(0, totalPages).toInt(),
+      pageCount: totalPages,
     );
   }
 }
