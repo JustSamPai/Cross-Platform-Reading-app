@@ -26,15 +26,19 @@ class _ExtensionSourcePageState extends State<ExtensionSourcePage> {
   final searchController = TextEditingController();
   final manualTitleController = TextEditingController();
   final manualUrlController = TextEditingController();
+  late final List<_SourceCategory> categories;
+  late _SourceCategory selectedCategory;
   Future<List<WebSourceEntry>>? entriesFuture;
   String query = '';
 
   @override
   void initState() {
     super.initState();
-    sourceUrlController.text = widget.extension.site;
-    if (widget.extension.site.isNotEmpty) {
-      entriesFuture = _loadEntries(widget.extension.site);
+    categories = _SourceCategoryParser(widget.extension).parse();
+    selectedCategory = categories.first;
+    sourceUrlController.text = selectedCategory.url;
+    if (selectedCategory.url.isNotEmpty) {
+      entriesFuture = _loadEntries(selectedCategory.url);
     }
   }
 
@@ -96,6 +100,34 @@ class _ExtensionSourcePageState extends State<ExtensionSourcePage> {
                   ),
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _loadCurrentSourceUrl(),
+                ),
+                const SizedBox(height: 12),
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.category_outlined),
+                    labelText: 'Category',
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<_SourceCategory>(
+                      value: categories.contains(selectedCategory)
+                          ? selectedCategory
+                          : null,
+                      isExpanded: true,
+                      items: [
+                        for (final category in categories)
+                          DropdownMenuItem(
+                            value: category,
+                            child: Text(category.label),
+                          ),
+                      ],
+                      onChanged: (category) {
+                        if (category == null) {
+                          return;
+                        }
+                        _selectCategory(category);
+                      },
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -178,13 +210,20 @@ class _ExtensionSourcePageState extends State<ExtensionSourcePage> {
 
             return Column(
               children: [
-                for (final entry in entries)
-                  _SourceEntryTile(
-                    entry: entry,
-                    saved: savedUrls.contains(entry.url),
-                    onSave: () => _saveEntry(entry),
-                    onOpen: () => _openEntry(entry),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${entries.length} novels in ${selectedCategory.label}',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
+                ),
+                const SizedBox(height: 12),
+                _SourceEntryGrid(
+                  entries: entries,
+                  savedUrls: savedUrls,
+                  onSave: _saveEntry,
+                  onOpen: _openEntry,
+                ),
               ],
             );
           },
@@ -290,7 +329,18 @@ class _ExtensionSourcePageState extends State<ExtensionSourcePage> {
     }
 
     setState(() {
+      selectedCategory = _SourceCategory.custom(url);
       entriesFuture = _loadEntries(url);
+    });
+  }
+
+  void _selectCategory(_SourceCategory category) {
+    setState(() {
+      selectedCategory = category;
+      sourceUrlController.text = category.url;
+      query = '';
+      searchController.clear();
+      entriesFuture = _loadEntries(category.url);
     });
   }
 
@@ -373,6 +423,203 @@ class _ExtensionSourcePageState extends State<ExtensionSourcePage> {
   }
 }
 
+class _SourceCategory {
+  const _SourceCategory({
+    required this.label,
+    required this.url,
+  });
+
+  factory _SourceCategory.custom(String url) {
+    return _SourceCategory(label: 'Custom URL', url: url);
+  }
+
+  final String label;
+  final String url;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _SourceCategory && other.label == label && other.url == url;
+  }
+
+  @override
+  int get hashCode => Object.hash(label, url);
+}
+
+class _SourceCategoryParser {
+  const _SourceCategoryParser(this.extension);
+
+  final ExtensionManifest extension;
+
+  List<_SourceCategory> parse() {
+    final categoriesByUrl = <String, _SourceCategory>{};
+    final sourceCode = extension.sourceCode ?? '';
+
+    for (final option in _optionsFor(sourceCode, 'type')) {
+      final url = _categoryUrl(option.value);
+      categoriesByUrl[url] = _SourceCategory(
+        label: _popularLabel(option.label),
+        url: url,
+      );
+    }
+
+    for (final option in _optionsFor(sourceCode, 'genres')) {
+      final url = _categoryUrl(option.value);
+      categoriesByUrl[url] = _SourceCategory(
+        label: option.label,
+        url: url,
+      );
+    }
+
+    if (categoriesByUrl.isEmpty) {
+      final url = extension.site.trim();
+      return [_SourceCategory(label: 'Popular', url: url)];
+    }
+
+    final categories = categoriesByUrl.values.toList();
+    categories.sort((a, b) {
+      final aPopular = _isPopular(a);
+      final bPopular = _isPopular(b);
+      if (aPopular != bPopular) {
+        return aPopular ? -1 : 1;
+      }
+      return a.label.compareTo(b.label);
+    });
+    return categories;
+  }
+
+  Iterable<_FilterOption> _optionsFor(String sourceCode, String filterName) {
+    final match = RegExp(
+      '$filterName:\\{[\\s\\S]*?options:\\[(.*?)\\]\\}',
+    ).firstMatch(sourceCode);
+    final optionsSource = match?.group(1);
+    if (optionsSource == null || optionsSource.isEmpty) {
+      return const [];
+    }
+
+    return RegExp(
+      r'label:"([^"]+)",value:"([^"]*)"',
+    ).allMatches(optionsSource).map((match) {
+      return _FilterOption(
+        label: _decodeOptionText(match.group(1) ?? ''),
+        value: _decodeOptionText(match.group(2) ?? ''),
+      );
+    }).where((option) {
+      return option.label.isNotEmpty && option.value.isNotEmpty;
+    });
+  }
+
+  String _categoryUrl(String value) {
+    final directUri = Uri.tryParse(value);
+    if (directUri != null &&
+        directUri.host.isNotEmpty &&
+        (directUri.scheme == 'http' || directUri.scheme == 'https')) {
+      return _withPage(directUri).toString();
+    }
+
+    final baseUri = Uri.tryParse(extension.site.trim());
+    if (baseUri == null || baseUri.host.isEmpty) {
+      return value;
+    }
+
+    final normalizedBase = baseUri.path.endsWith('/')
+        ? baseUri
+        : baseUri.replace(path: '${baseUri.path}/');
+    return _withPage(normalizedBase.resolve(value)).toString();
+  }
+
+  Uri _withPage(Uri uri) {
+    if (uri.queryParameters.containsKey('page')) {
+      return uri;
+    }
+
+    return uri.replace(
+      queryParameters: {
+        ...uri.queryParameters,
+        'page': '1',
+      },
+    );
+  }
+
+  String _popularLabel(String label) {
+    final normalized = label.trim().toLowerCase();
+    if (normalized == 'most popular') {
+      return 'Popular';
+    }
+    return label.trim();
+  }
+
+  bool _isPopular(_SourceCategory category) {
+    final label = category.label.toLowerCase();
+    final url = category.url.toLowerCase();
+    return label == 'popular' || url.contains('most-popular');
+  }
+
+  String _decodeOptionText(String value) {
+    return value
+        .replaceAll(r'\"', '"')
+        .replaceAll(r'\+', '+')
+        .replaceAll(r'\/', '/')
+        .trim();
+  }
+}
+
+class _FilterOption {
+  const _FilterOption({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+}
+
+class _SourceEntryGrid extends StatelessWidget {
+  const _SourceEntryGrid({
+    required this.entries,
+    required this.savedUrls,
+    required this.onSave,
+    required this.onOpen,
+  });
+
+  final List<WebSourceEntry> entries;
+  final Set<String> savedUrls;
+  final ValueChanged<WebSourceEntry> onSave;
+  final ValueChanged<WebSourceEntry> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final cardWidth = width >= 1040
+            ? (width - 36) / 4
+            : width >= 760
+                ? (width - 24) / 3
+                : width >= 520
+                    ? (width - 12) / 2
+                    : width;
+
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final entry in entries)
+              SizedBox(
+                width: cardWidth,
+                child: _SourceEntryCard(
+                  entry: entry,
+                  saved: savedUrls.contains(entry.url),
+                  onSave: () => onSave(entry),
+                  onOpen: () => onOpen(entry),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _ManualEntryCard extends StatelessWidget {
   const _ManualEntryCard({
     required this.titleController,
@@ -419,8 +666,8 @@ class _ManualEntryCard extends StatelessWidget {
   }
 }
 
-class _SourceEntryTile extends StatelessWidget {
-  const _SourceEntryTile({
+class _SourceEntryCard extends StatelessWidget {
+  const _SourceEntryCard({
     required this.entry,
     required this.saved,
     required this.onSave,
@@ -437,45 +684,138 @@ class _SourceEntryTile extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: entry.coverUrl == null
-            ? Icon(Icons.menu_book_outlined, color: colorScheme.primary)
-            : ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Image.network(
-                  entry.coverUrl!,
-                  width: 44,
-                  height: 56,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, _, __) {
-                    return Icon(
-                      Icons.menu_book_outlined,
-                      color: colorScheme.primary,
-                    );
-                  },
-                ),
-              ),
-        title: Text(entry.title),
-        subtitle: Text(
-          entry.url,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: Wrap(
-          spacing: 4,
+      clipBehavior: Clip.antiAlias,
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: onOpen,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            IconButton(
-              tooltip: saved ? 'Saved' : 'Save',
-              onPressed: saved ? null : onSave,
-              icon: Icon(
-                saved ? Icons.bookmark_added : Icons.bookmark_add_outlined,
+            AspectRatio(
+              aspectRatio: 3 / 4,
+              child: _SourceCover(
+                imageUrl: entry.coverUrl,
+                title: entry.title,
               ),
             ),
-            IconButton.filled(
-              tooltip: 'Read',
-              onPressed: onOpen,
-              icon: const Icon(Icons.chrome_reader_mode_outlined),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    height: 44,
+                    child: Text(
+                      entry.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 36,
+                    child: Text(
+                      entry.description?.isNotEmpty == true
+                          ? entry.description!
+                          : entry.url,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(
+                        saved
+                            ? Icons.bookmark_added
+                            : Icons.bookmark_border_outlined,
+                        color:
+                            saved ? colorScheme.primary : colorScheme.outline,
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: saved ? 'Saved' : 'Save',
+                        onPressed: saved ? null : onSave,
+                        icon: Icon(
+                          saved
+                              ? Icons.bookmark_added
+                              : Icons.bookmark_add_outlined,
+                        ),
+                      ),
+                      IconButton.filled(
+                        tooltip: 'Read',
+                        onPressed: onOpen,
+                        icon: const Icon(Icons.chrome_reader_mode_outlined),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SourceCover extends StatelessWidget {
+  const _SourceCover({
+    required this.imageUrl,
+    required this.title,
+  });
+
+  final String? imageUrl;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return Image.network(
+        imageUrl!,
+        fit: BoxFit.cover,
+        errorBuilder: (context, _, __) {
+          return _BlankCover(title: title);
+        },
+      );
+    }
+
+    return _BlankCover(title: title);
+  }
+}
+
+class _BlankCover extends StatelessWidget {
+  const _BlankCover({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ColoredBox(
+      color: colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.menu_book_outlined,
+              color: colorScheme.primary,
+              size: 40,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
             ),
           ],
         ),

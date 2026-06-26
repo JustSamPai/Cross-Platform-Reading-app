@@ -67,4 +67,46 @@ void main() {
     expect(content.text, contains('The first line.'));
     expect(content.text, isNot(contains('Navigation')));
   });
+
+  test('extracts structured novel rows with covers', () async {
+    final client = WebContentClient(
+      client: MockClient((request) async {
+        return http.Response(
+          '''
+          <html>
+            <body>
+              <div class="archive">
+                <div class="row">
+                  <div><img src="/uploads/thumbs/hidden.jpg" class="cover" alt="Hidden Marriage"></div>
+                  <div>
+                    <h3 class="truyen-title">
+                      <a href="/hidden-marriage.html" title="Hidden Marriage">Hidden Marriage</a>
+                    </h3>
+                    <span class="author">Jiong Jiong You Yao</span>
+                  </div>
+                  <div>
+                    <a href="/hidden-marriage/chapter-1.html" title="Chapter 1">Chapter 1</a>
+                  </div>
+                </div>
+              </div>
+            </body>
+          </html>
+          ''',
+          200,
+        );
+      }),
+    );
+
+    final entries = await client.fetchEntries(
+      url: 'https://novgo.net/most-popular?page=1',
+      sourceName: 'NOVGO',
+    );
+
+    expect(entries, hasLength(1));
+    expect(entries.single.title, 'Hidden Marriage');
+    expect(entries.single.url, 'https://novgo.net/hidden-marriage.html');
+    expect(
+        entries.single.coverUrl, 'https://novgo.net/uploads/thumbs/hidden.jpg');
+    expect(entries.single.description, 'Jiong Jiong You Yao');
+  });
 }

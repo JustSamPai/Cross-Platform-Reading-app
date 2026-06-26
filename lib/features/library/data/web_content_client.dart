@@ -23,11 +23,75 @@ class WebContentClient {
     final entriesByUrl = <String, WebSourceEntry>{};
 
     _removeNoisyNodes(document);
+    _extractStructuredEntries(
+      document: document,
+      baseUri: baseUri,
+      sourceName: sourceName,
+      entriesByUrl: entriesByUrl,
+    );
 
-    for (final link in document.querySelectorAll('a[href]')) {
-      final href = link.attributes['href'] ?? '';
-      final resolvedUrl = _resolveUrl(baseUri, href);
-      final title = _cleanText(link.text);
+    if (entriesByUrl.isEmpty) {
+      for (final link in document.querySelectorAll('a[href]')) {
+        final href = link.attributes['href'] ?? '';
+        final resolvedUrl = _resolveUrl(baseUri, href);
+        final title = _cleanText(link.attributes['title'] ?? link.text);
+        if (resolvedUrl == null || !_looksLikeEntryTitle(title)) {
+          continue;
+        }
+
+        final key = _withoutFragment(resolvedUrl);
+        entriesByUrl.putIfAbsent(
+          key,
+          () => WebSourceEntry(
+            title: title,
+            url: key,
+            sourceName: sourceName,
+            description: _cleanText(link.attributes['title'] ?? ''),
+            coverUrl: _coverUrlFor(link, baseUri),
+          ),
+        );
+
+        if (entriesByUrl.length >= 100) {
+          break;
+        }
+      }
+    }
+
+    final entries = entriesByUrl.values.toList()
+      ..sort((a, b) => a.title.compareTo(b.title));
+    return entries;
+  }
+
+  void _extractStructuredEntries({
+    required dom.Document document,
+    required Uri baseUri,
+    required String sourceName,
+    required Map<String, WebSourceEntry> entriesByUrl,
+  }) {
+    final containers = document.querySelectorAll(
+      '.archive .row, '
+      '.col-content .row, '
+      '.list-truyen .row, '
+      '.novel-item, '
+      '.book-item, '
+      '.m-imgtxt',
+    );
+
+    for (final container in containers) {
+      final link = container.querySelector('h3 a[href]') ??
+          container.querySelector('.truyen-title a[href]') ??
+          container.querySelector('a[href][title]');
+      if (link == null) {
+        continue;
+      }
+
+      final image = container.querySelector('img');
+      final title = _cleanText(
+        link.attributes['title'] ?? link.text,
+      ).isNotEmpty
+          ? _cleanText(link.attributes['title'] ?? link.text)
+          : _cleanText(image?.attributes['alt'] ?? '');
+      final resolvedUrl = _resolveUrl(baseUri, link.attributes['href'] ?? '');
       if (resolvedUrl == null || !_looksLikeEntryTitle(title)) {
         continue;
       }
@@ -39,8 +103,12 @@ class WebContentClient {
           title: title,
           url: key,
           sourceName: sourceName,
-          description: _cleanText(link.attributes['title'] ?? ''),
-          coverUrl: _coverUrlFor(link, baseUri),
+          description: _cleanText(
+            container.querySelector('.author')?.text ??
+                container.querySelector('.desc')?.text ??
+                '',
+          ),
+          coverUrl: _coverUrlForContainer(container, baseUri),
         ),
       );
 
@@ -48,10 +116,6 @@ class WebContentClient {
         break;
       }
     }
-
-    final entries = entriesByUrl.values.toList()
-      ..sort((a, b) => a.title.compareTo(b.title));
-    return entries;
   }
 
   Future<ReadableWebContent> fetchReadableContent(String url) async {
@@ -169,6 +233,17 @@ class WebContentClient {
     return _resolveUrl(baseUri, source);
   }
 
+  String? _coverUrlForContainer(dom.Element container, Uri baseUri) {
+    final image = container.querySelector('img');
+    final source = image?.attributes['src'] ??
+        image?.attributes['data-src'] ??
+        image?.attributes['data-cfsrc'];
+    if (source == null || source.trim().isEmpty) {
+      return null;
+    }
+    return _resolveUrl(baseUri, source);
+  }
+
   void _removeNoisyNodes(dom.Document document) {
     for (final selector in const [
       'script',
@@ -223,7 +298,7 @@ class WebContentClient {
 
   String _withoutFragment(String url) {
     final uri = Uri.parse(url);
-    return uri.replace(fragment: '').toString();
+    return uri.removeFragment().toString();
   }
 
   String _cleanText(String value) {
