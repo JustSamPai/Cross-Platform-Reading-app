@@ -46,6 +46,9 @@ class ReadingDocument {
     this.sourceName,
     this.sourceText,
     this.coverUrl,
+    this.lastReadChapterUrl,
+    this.lastReadChapterTitle,
+    this.readChapterUrls = const [],
   });
 
   final String id;
@@ -63,6 +66,9 @@ class ReadingDocument {
   final String? sourceName;
   final String? sourceText;
   final String? coverUrl;
+  final String? lastReadChapterUrl;
+  final String? lastReadChapterTitle;
+  final List<String> readChapterUrls;
 
   bool get canOpenInApp =>
       (bytes != null &&
@@ -114,6 +120,9 @@ class ReadingDocument {
     String? sourceName,
     String? sourceText,
     String? coverUrl,
+    String? lastReadChapterUrl,
+    String? lastReadChapterTitle,
+    List<String>? readChapterUrls,
   }) {
     return ReadingDocument(
       id: id ?? this.id,
@@ -131,6 +140,9 @@ class ReadingDocument {
       sourceName: sourceName ?? this.sourceName,
       sourceText: sourceText ?? this.sourceText,
       coverUrl: coverUrl ?? this.coverUrl,
+      lastReadChapterUrl: lastReadChapterUrl ?? this.lastReadChapterUrl,
+      lastReadChapterTitle: lastReadChapterTitle ?? this.lastReadChapterTitle,
+      readChapterUrls: readChapterUrls ?? this.readChapterUrls,
     );
   }
 
@@ -151,6 +163,9 @@ class ReadingDocument {
       'sourceName': sourceName,
       'sourceText': sourceText,
       'coverUrl': coverUrl,
+      'lastReadChapterUrl': lastReadChapterUrl,
+      'lastReadChapterTitle': lastReadChapterTitle,
+      'readChapterUrls': readChapterUrls,
     };
   }
 
@@ -182,6 +197,11 @@ class ReadingDocument {
       sourceName: map['sourceName'] as String?,
       sourceText: map['sourceText'] as String?,
       coverUrl: map['coverUrl'] as String?,
+      lastReadChapterUrl: map['lastReadChapterUrl'] as String?,
+      lastReadChapterTitle: map['lastReadChapterTitle'] as String?,
+      readChapterUrls:
+          (map['readChapterUrls'] as List?)?.whereType<String>().toList() ??
+              const [],
     );
   }
 

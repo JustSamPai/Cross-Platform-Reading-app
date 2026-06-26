@@ -7,10 +7,14 @@ import '../../library/models/reading_document.dart';
 class ExternalNovelReaderPage extends StatefulWidget {
   const ExternalNovelReaderPage({
     required this.document,
+    this.chapters = const [],
+    this.initialChapterIndex = 0,
     super.key,
   });
 
   final ReadingDocument document;
+  final List<WebChapterEntry> chapters;
+  final int initialChapterIndex;
 
   @override
   State<ExternalNovelReaderPage> createState() =>
@@ -22,11 +26,32 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
   final contentClient = const WebContentClient();
   late ReadingDocument document;
   late Future<ReadableWebContent> contentFuture;
+  late int currentChapterIndex;
+
+  bool get hasChapters => widget.chapters.isNotEmpty;
+
+  WebChapterEntry? get currentChapter {
+    if (!hasChapters ||
+        currentChapterIndex < 0 ||
+        currentChapterIndex >= widget.chapters.length) {
+      return null;
+    }
+    return widget.chapters[currentChapterIndex];
+  }
+
+  bool get canGoPrevious => hasChapters && currentChapterIndex > 0;
+
+  bool get canGoNext =>
+      hasChapters && currentChapterIndex < widget.chapters.length - 1;
 
   @override
   void initState() {
     super.initState();
-    document = widget.document;
+    currentChapterIndex = widget.initialChapterIndex.clamp(
+      0,
+      widget.chapters.isEmpty ? 0 : widget.chapters.length - 1,
+    );
+    document = _markCurrentChapterRead(widget.document);
     contentFuture = _loadContent();
   }
 
@@ -41,15 +66,27 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
             onPressed: _refresh,
             icon: const Icon(Icons.refresh),
           ),
-          IconButton(
-            tooltip: document.progress >= 1 ? 'Mark unread' : 'Mark read',
-            onPressed: _toggleRead,
-            icon: Icon(
-              document.progress >= 1
-                  ? Icons.bookmark_remove_outlined
-                  : Icons.bookmark_added_outlined,
+          if (hasChapters) ...[
+            IconButton(
+              tooltip: 'Previous chapter',
+              onPressed: canGoPrevious ? _previousChapter : null,
+              icon: const Icon(Icons.skip_previous),
             ),
-          ),
+            IconButton(
+              tooltip: 'Next chapter',
+              onPressed: canGoNext ? _nextChapter : null,
+              icon: const Icon(Icons.skip_next),
+            ),
+          ] else
+            IconButton(
+              tooltip: document.progress >= 1 ? 'Mark unread' : 'Mark read',
+              onPressed: _toggleRead,
+              icon: Icon(
+                document.progress >= 1
+                    ? Icons.bookmark_remove_outlined
+                    : Icons.bookmark_added_outlined,
+              ),
+            ),
         ],
       ),
       body: FutureBuilder<ReadableWebContent>(
@@ -88,7 +125,7 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        content.title,
+                        currentChapter?.title ?? content.title,
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
                       if (document.sourceName != null) ...[
@@ -104,6 +141,17 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      if (hasChapters) ...[
+                        _ChapterControls(
+                          currentChapterNumber: currentChapterIndex + 1,
+                          totalChapters: widget.chapters.length,
+                          canGoPrevious: canGoPrevious,
+                          canGoNext: canGoNext,
+                          onPrevious: _previousChapter,
+                          onNext: _nextChapter,
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       SelectableText(
                         content.text,
                         style: Theme.of(context)
@@ -111,6 +159,17 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
                             .bodyLarge
                             ?.copyWith(height: 1.6),
                       ),
+                      if (hasChapters) ...[
+                        const SizedBox(height: 24),
+                        _ChapterControls(
+                          currentChapterNumber: currentChapterIndex + 1,
+                          totalChapters: widget.chapters.length,
+                          canGoPrevious: canGoPrevious,
+                          canGoNext: canGoNext,
+                          onPrevious: _previousChapter,
+                          onNext: _nextChapter,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -123,6 +182,11 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
   }
 
   Future<ReadableWebContent> _loadContent({bool forceRefresh = false}) async {
+    final chapter = currentChapter;
+    if (chapter != null) {
+      return contentClient.fetchReadableContent(chapter.url);
+    }
+
     final cachedText = document.sourceText;
     if (!forceRefresh && cachedText != null && cachedText.trim().length > 200) {
       return ReadableWebContent(
@@ -167,6 +231,98 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
     setState(() {
       document = updatedDocument;
     });
+  }
+
+  void _previousChapter() {
+    if (!canGoPrevious) {
+      return;
+    }
+    _openChapterIndex(currentChapterIndex - 1);
+  }
+
+  void _nextChapter() {
+    if (!canGoNext) {
+      return;
+    }
+    _openChapterIndex(currentChapterIndex + 1);
+  }
+
+  void _openChapterIndex(int index) {
+    final chapter = widget.chapters[index];
+    final updatedDocument = store.markChapterRead(
+      document.id,
+      chapterUrl: chapter.url,
+      chapterTitle: chapter.title,
+      chapterNumber: index + 1,
+      chapterCount: widget.chapters.length,
+    );
+
+    setState(() {
+      currentChapterIndex = index;
+      document = updatedDocument ?? document;
+      contentFuture = _loadContent(forceRefresh: true);
+    });
+  }
+
+  ReadingDocument _markCurrentChapterRead(ReadingDocument currentDocument) {
+    final chapter = currentChapter;
+    if (chapter == null) {
+      return currentDocument;
+    }
+
+    return store.markChapterRead(
+          currentDocument.id,
+          chapterUrl: chapter.url,
+          chapterTitle: chapter.title,
+          chapterNumber: currentChapterIndex + 1,
+          chapterCount: widget.chapters.length,
+        ) ??
+        currentDocument;
+  }
+}
+
+class _ChapterControls extends StatelessWidget {
+  const _ChapterControls({
+    required this.currentChapterNumber,
+    required this.totalChapters,
+    required this.canGoPrevious,
+    required this.canGoNext,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final int currentChapterNumber;
+  final int totalChapters;
+  final bool canGoPrevious;
+  final bool canGoNext;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        IconButton.filledTonal(
+          tooltip: 'Previous chapter',
+          onPressed: canGoPrevious ? onPrevious : null,
+          icon: const Icon(Icons.chevron_left),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            'Chapter $currentChapterNumber of $totalChapters',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        const SizedBox(width: 12),
+        FilledButton.icon(
+          onPressed: canGoNext ? onNext : null,
+          icon: const Icon(Icons.chevron_right),
+          label: const Text('Next'),
+        ),
+      ],
+    );
   }
 }
 

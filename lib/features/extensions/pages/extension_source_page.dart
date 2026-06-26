@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import '../../library/data/library_store.dart';
 import '../../library/data/web_content_client.dart';
 import '../../library/models/reading_document.dart';
-import '../../pdf/pages/external_novel_reader_page.dart';
+import '../../pdf/pages/web_novel_chapters_page.dart';
 import '../models/extension_manifest.dart';
 
 class ExtensionSourcePage extends StatefulWidget {
@@ -413,7 +413,7 @@ class _ExtensionSourcePageState extends State<ExtensionSourcePage> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ExternalNovelReaderPage(document: document),
+        builder: (context) => WebNovelChaptersPage(document: document),
       ),
     );
 

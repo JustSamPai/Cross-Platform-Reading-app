@@ -144,6 +144,49 @@ class WebContentClient {
     );
   }
 
+  Future<List<WebChapterEntry>> fetchChapters(String url) async {
+    final body = await _get(url);
+    final baseUri = _parseHttpUri(url);
+    final document = html_parser.parse(body);
+    final chaptersByUrl = <String, WebChapterEntry>{};
+
+    final ajaxChapterUrl = _ajaxChapterUrlFor(document, baseUri);
+    if (ajaxChapterUrl != null) {
+      final chapterBody = await _get(ajaxChapterUrl);
+      final chapterDocument = html_parser.parse(chapterBody);
+      _extractChapterOptions(
+        document: chapterDocument,
+        baseUri: baseUri,
+        chaptersByUrl: chaptersByUrl,
+      );
+    }
+
+    if (chaptersByUrl.isEmpty) {
+      _removeNoisyNodes(document);
+      _extractChapterOptions(
+        document: document,
+        baseUri: baseUri,
+        chaptersByUrl: chaptersByUrl,
+      );
+      _extractChapterLinks(
+        document: document,
+        baseUri: baseUri,
+        chaptersByUrl: chaptersByUrl,
+      );
+    }
+
+    if (chaptersByUrl.isEmpty) {
+      return [
+        WebChapterEntry(
+          title: 'Chapter 1',
+          url: _withoutFragment(baseUri.toString()),
+        ),
+      ];
+    }
+
+    return chaptersByUrl.values.toList();
+  }
+
   Future<String> _get(String url) async {
     final uri = _parseHttpUri(url);
     final client = _client ?? http.Client();
@@ -157,6 +200,78 @@ class WebContentClient {
       if (_client == null) {
         client.close();
       }
+    }
+  }
+
+  String? _ajaxChapterUrlFor(dom.Document document, Uri baseUri) {
+    final rating = document.querySelector('[data-novel-id]');
+    final novelId = rating?.attributes['data-novel-id'];
+    if (novelId == null || novelId.trim().isEmpty) {
+      return null;
+    }
+
+    final body = document.outerHtml;
+    final endpointMatch = RegExp(
+      r"ajaxChapterOptionUrl\s*=\s*'([^']+)'",
+    ).firstMatch(body);
+    final endpoint = endpointMatch?.group(1) ?? 'ajax-chapter-option';
+    final endpointUri = Uri.tryParse(endpoint);
+    final resolvedEndpoint = endpointUri == null
+        ? baseUri.resolve('ajax-chapter-option')
+        : baseUri.resolveUri(endpointUri);
+
+    return resolvedEndpoint.replace(
+      queryParameters: {
+        ...resolvedEndpoint.queryParameters,
+        'novelId': novelId,
+      },
+    ).toString();
+  }
+
+  void _extractChapterOptions({
+    required dom.Document document,
+    required Uri baseUri,
+    required Map<String, WebChapterEntry> chaptersByUrl,
+  }) {
+    for (final option in document.querySelectorAll('option[value]')) {
+      final title = _cleanText(option.text);
+      final resolvedUrl =
+          _resolveUrl(baseUri, option.attributes['value'] ?? '');
+      if (resolvedUrl == null || title.isEmpty) {
+        continue;
+      }
+
+      final key = _withoutFragment(resolvedUrl);
+      chaptersByUrl.putIfAbsent(
+        key,
+        () => WebChapterEntry(title: title, url: key),
+      );
+    }
+  }
+
+  void _extractChapterLinks({
+    required dom.Document document,
+    required Uri baseUri,
+    required Map<String, WebChapterEntry> chaptersByUrl,
+  }) {
+    for (final link in document.querySelectorAll('a[href]')) {
+      final href = link.attributes['href'] ?? '';
+      final title = _cleanText(link.attributes['title'] ?? link.text);
+      final normalized = '$href $title'.toLowerCase();
+      if (!normalized.contains('chapter')) {
+        continue;
+      }
+
+      final resolvedUrl = _resolveUrl(baseUri, href);
+      if (resolvedUrl == null || title.isEmpty) {
+        continue;
+      }
+
+      final key = _withoutFragment(resolvedUrl);
+      chaptersByUrl.putIfAbsent(
+        key,
+        () => WebChapterEntry(title: title, url: key),
+      );
     }
   }
 
@@ -320,6 +435,16 @@ class WebSourceEntry {
   final String sourceName;
   final String? description;
   final String? coverUrl;
+}
+
+class WebChapterEntry {
+  const WebChapterEntry({
+    required this.title,
+    required this.url,
+  });
+
+  final String title;
+  final String url;
 }
 
 class ReadableWebContent {

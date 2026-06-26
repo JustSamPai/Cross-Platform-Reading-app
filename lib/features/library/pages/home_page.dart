@@ -9,8 +9,8 @@ import '../../habits/pages/habits_page.dart';
 import '../../pdf/pages/book_progress_page.dart';
 import '../../pdf/pages/document_reader_page.dart';
 import '../../pdf/pages/epub_reader_page.dart';
-import '../../pdf/pages/external_novel_reader_page.dart';
 import '../../pdf/pages/pdf_reader_page.dart';
+import '../../pdf/pages/web_novel_chapters_page.dart';
 import '../data/document_importer.dart';
 import '../data/library_store.dart';
 import '../../quiz/pages/quiz_page.dart';
@@ -359,7 +359,7 @@ class _LibraryDashboardState extends State<_LibraryDashboard> {
             ReadingDocumentType.pdf => DocumentReaderPage(document: document),
             ReadingDocumentType.epub => EpubReaderPage(document: document),
             ReadingDocumentType.webNovel =>
-              ExternalNovelReaderPage(document: document),
+              WebNovelChaptersPage(document: document),
             ReadingDocumentType.book ||
             ReadingDocumentType.other =>
               BookProgressPage(document: document),

@@ -109,4 +109,49 @@ void main() {
         entries.single.coverUrl, 'https://novgo.net/uploads/thumbs/hidden.jpg');
     expect(entries.single.description, 'Jiong Jiong You Yao');
   });
+
+  test('extracts chapters from ajax chapter options', () async {
+    final client = WebContentClient(
+      client: MockClient((request) async {
+        if (request.url.path.contains('ajax-chapter-option')) {
+          return http.Response(
+            '''
+            <select>
+              <option value="/hidden-marriage/chapter-1.html">Chapter 1</option>
+              <option value="/hidden-marriage/chapter-2.html">Chapter 2</option>
+            </select>
+            ''',
+            200,
+          );
+        }
+
+        return http.Response(
+          '''
+          <html>
+            <head>
+              <script>
+                var ajaxChapterOptionUrl = 'https://novgo.net/ajax-chapter-option';
+              </script>
+            </head>
+            <body>
+              <div id="rating" data-novel-id="184"></div>
+            </body>
+          </html>
+          ''',
+          200,
+        );
+      }),
+    );
+
+    final chapters = await client.fetchChapters(
+      'https://novgo.net/hidden-marriage.html',
+    );
+
+    expect(chapters, hasLength(2));
+    expect(chapters.first.title, 'Chapter 1');
+    expect(
+      chapters.first.url,
+      'https://novgo.net/hidden-marriage/chapter-1.html',
+    );
+  });
 }

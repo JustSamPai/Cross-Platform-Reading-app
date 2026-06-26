@@ -104,4 +104,30 @@ void main() {
     expect(documents.first.canOpenInApp, isTrue);
     expect(updated?.sourceText, contains('readable chapter'));
   });
+
+  test('tracks web novel chapter history', () {
+    final store = LibraryStore(box: box);
+    final novel = ReadingDocument.externalNovel(
+      title: 'A Remote Novel',
+      sourceUrl: 'https://example.com/novel',
+      sourceName: 'Example Source',
+    );
+
+    final document = store.addDocument(novel).first;
+    store.markChapterRead(
+      document.id,
+      chapterUrl: 'https://example.com/novel/chapter-1',
+      chapterTitle: 'Chapter 1',
+      chapterNumber: 1,
+      chapterCount: 3,
+    );
+
+    final updated = store.documents().first;
+
+    expect(updated.lastReadChapterTitle, 'Chapter 1');
+    expect(updated.readChapterUrls,
+        contains('https://example.com/novel/chapter-1'));
+    expect(updated.progressPercent, 33);
+    expect(store.readingHistory().single.id, updated.id);
+  });
 }

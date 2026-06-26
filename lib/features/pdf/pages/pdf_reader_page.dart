@@ -7,7 +7,7 @@ import '../../library/models/reading_document.dart';
 import 'book_progress_page.dart';
 import 'document_reader_page.dart';
 import 'epub_reader_page.dart';
-import 'external_novel_reader_page.dart';
+import 'web_novel_chapters_page.dart';
 
 class PdfReaderPage extends StatefulWidget {
   const PdfReaderPage({super.key});
@@ -126,7 +126,7 @@ class _PdfReaderPageState extends State<PdfReaderPage> {
             ReadingDocumentType.pdf => DocumentReaderPage(document: document),
             ReadingDocumentType.epub => EpubReaderPage(document: document),
             ReadingDocumentType.webNovel =>
-              ExternalNovelReaderPage(document: document),
+              WebNovelChaptersPage(document: document),
             ReadingDocumentType.book ||
             ReadingDocumentType.other =>
               BookProgressPage(document: document),

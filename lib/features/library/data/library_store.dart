@@ -27,6 +27,15 @@ class LibraryStore {
       ..sort((a, b) => b.addedAt.compareTo(a.addedAt));
   }
 
+  List<ReadingDocument> readingHistory() {
+    return documents()
+        .where((document) => document.lastOpenedAt != null)
+        .toList()
+      ..sort((a, b) {
+        return b.lastOpenedAt!.compareTo(a.lastOpenedAt!);
+      });
+  }
+
   List<ReadingDocument> addDocument(ReadingDocument document) {
     final docs = documents().toList();
     final alreadyImported = docs.any(
@@ -122,6 +131,36 @@ class LibraryStore {
 
     docs[index] = docs[index].copyWith(
       sourceText: sourceText,
+      lastOpenedAt: DateTime.now(),
+    );
+    _saveDocuments(docs);
+    return docs[index];
+  }
+
+  ReadingDocument? markChapterRead(
+    String id, {
+    required String chapterUrl,
+    required String chapterTitle,
+    required int chapterNumber,
+    required int chapterCount,
+  }) {
+    final docs = documents().toList();
+    final index = docs.indexWhere((document) => document.id == id);
+    if (index == -1) {
+      return null;
+    }
+
+    final readChapterUrls = {
+      ...docs[index].readChapterUrls,
+      chapterUrl,
+    }.toList();
+
+    docs[index] = docs[index].copyWith(
+      lastReadChapterUrl: chapterUrl,
+      lastReadChapterTitle: chapterTitle,
+      readChapterUrls: readChapterUrls,
+      lastPageNumber: chapterNumber.clamp(0, chapterCount).toInt(),
+      pageCount: chapterCount,
       lastOpenedAt: DateTime.now(),
     );
     _saveDocuments(docs);
