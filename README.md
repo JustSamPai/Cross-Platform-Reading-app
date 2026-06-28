@@ -4,6 +4,14 @@ ReadFlow is a cross-platform Flutter app for tracking reading progress, daily re
 
 The project is structured as a portfolio-ready rewrite of a university reading app prototype. It keeps the same core feature set while presenting the code in a cleaner feature-based architecture.
 
+## Why I built this
+
+I rebuilt this app because I wanted to replace some of the time I spent watching YouTube Shorts with reading. I was inspired by apps like LNReader and Aniyomi, especially their extension-based approach to finding and reading content.
+
+I also wanted to add a points-based progression system because I find reading more engaging when I can see my streak increase, earn XP, and make visible progress over time. The goal was to combine a flexible reading app with light gamification, making it easier and more enjoyable to build a consistent reading habit.
+
+This project also gave me a practical way to improve my Flutter and Dart skills while working on an app idea I would personally use and continue developing.
+
 ## Features
 
 - Reading dashboard with active books, page progress, and topic tags
@@ -102,8 +110,8 @@ flutter test
 - Preserves the original university app behavior with typed models, stores, and tests
 
 ## Roadmap
-
+- Add Intergrated PDF editor
 - Add Hive adapters if the stored models become more complex
 - Add full text extraction/search inside PDF contents
 - Add a dedicated EPUB renderer
-- Add screenshots or a short demo GIF for the GitHub README
+- Add screenshots or a short demo GIF for the GitHub READM
