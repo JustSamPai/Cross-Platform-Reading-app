@@ -110,7 +110,6 @@ flutter test
 - Preserves the original university app behavior with typed models, stores, and tests
 
 ## Roadmap
-- Add Intergrated PDF editor
 - Add Hive adapters if the stored models become more complex
 - Add full text extraction/search inside PDF contents
 - Add a dedicated EPUB renderer
