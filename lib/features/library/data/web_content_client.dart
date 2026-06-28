@@ -125,17 +125,26 @@ class WebContentClient {
 
     final title = _firstCleanText(
       [
+        document.querySelector('.chapter-title'),
+        document.querySelector('#chapter h2'),
         document.querySelector('article h1'),
         document.querySelector('main h1'),
         document.querySelector('h1'),
         document.querySelector('title'),
       ],
     );
-    final root = document.querySelector('article') ??
+    final root = document.querySelector('#chapter-content') ??
+        document.querySelector('#chr-content') ??
+        document.querySelector('.chr-content') ??
+        document.querySelector('.chapter-content') ??
+        document.querySelector('.chapter-c') ??
+        document.querySelector('article') ??
         document.querySelector('main') ??
         document.querySelector('[role="main"]') ??
         document.body;
-    final text = _cleanText(root?.text ?? document.documentElement?.text ?? '');
+    final text = root == null
+        ? _cleanText(document.documentElement?.text ?? '')
+        : _extractReadableText(root, title: title);
 
     return ReadableWebContent(
       title: title.isEmpty ? url : title,
@@ -377,6 +386,63 @@ class WebContentClient {
         node.remove();
       }
     }
+  }
+
+  String _extractReadableText(dom.Element root, {required String title}) {
+    for (final selector in const [
+      '.chapter-nav',
+      '.chapter-navigation',
+      '.unlock-buttons',
+      '.ads',
+      '.adsbygoogle',
+      '[class*="advert"]',
+      '[id*="advert"]',
+      '.translator',
+      '.translation',
+    ]) {
+      for (final node in root.querySelectorAll(selector)) {
+        node.remove();
+      }
+    }
+
+    final paragraphs = root
+        .querySelectorAll('p')
+        .map((paragraph) => _cleanText(paragraph.text))
+        .where((text) => text.isNotEmpty)
+        .toList();
+
+    if (paragraphs.isNotEmpty) {
+      while (paragraphs.isNotEmpty &&
+          _isLeadingChapterMetadata(paragraphs.first, title: title)) {
+        paragraphs.removeAt(0);
+      }
+      return paragraphs.join('\n\n');
+    }
+
+    var text = _cleanText(root.text);
+    if (_isLeadingChapterMetadata(text, title: title)) {
+      text = '';
+    }
+    return text;
+  }
+
+  bool _isLeadingChapterMetadata(String text, {required String title}) {
+    final normalized = _cleanText(text).toLowerCase();
+    final normalizedTitle = _cleanText(title).toLowerCase();
+    if (normalized.isEmpty ||
+        (normalizedTitle.isNotEmpty && normalized == normalizedTitle)) {
+      return true;
+    }
+
+    return RegExp(r'^chapter\s+(?:\d+|[ivxlcdm]+)\s*[:.\-]').hasMatch(
+          normalized,
+        ) ||
+        RegExp(
+          r'^(?:translator|translated by|translation|editor|edited by)\s*:',
+        ).hasMatch(normalized) ||
+        RegExp(r'^(?:prev(?:ious)? chapter|next chapter)(?:\s|$)').hasMatch(
+          normalized,
+        );
   }
 
   String _firstCleanText(List<dom.Element?> elements) {

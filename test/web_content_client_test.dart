@@ -68,6 +68,51 @@ void main() {
     expect(content.text, isNot(contains('Navigation')));
   });
 
+  test('extracts only story paragraphs from a novel chapter', () async {
+    final client = WebContentClient(
+      client: MockClient((request) async {
+        return http.Response(
+          '''
+          <html>
+            <body>
+              <main>
+                <div class="navbar-breadcrumb">
+                  Novel Bringing the Nation's Husband Home Chapter 3
+                </div>
+                <div id="chapter">
+                  <a class="truyen-title">Bringing the Nation's Husband Home</a>
+                  <h2><a class="chapter-title">Chapter 3: Bringing the Nation's Husband Home (3)</a></h2>
+                  <div class="chapter-nav">Prev Chapter Next Chapter</div>
+                  <div id="chapter-content">
+                    <p>Chapter 3: Bringing the Nation's Husband Home (3)</p>
+                    <p>Translator: Kingbao Editor: DarkGem</p>
+                    <p>Lu Jinnian left without sparing her another glance.</p>
+                    <p>Only then did Qiao Anhao move away from the wall.</p>
+                  </div>
+                </div>
+              </main>
+            </body>
+          </html>
+          ''',
+          200,
+        );
+      }),
+    );
+
+    final content = await client.fetchReadableContent(
+      'https://example.com/novel/chapter-3',
+    );
+
+    expect(
+      content.text,
+      'Lu Jinnian left without sparing her another glance.\n\n'
+      'Only then did Qiao Anhao move away from the wall.',
+    );
+    expect(content.text, isNot(contains('Translator')));
+    expect(content.text, isNot(contains('Prev Chapter')));
+    expect(content.text, isNot(contains("Bringing the Nation's Husband Home")));
+  });
+
   test('extracts structured novel rows with covers', () async {
     final client = WebContentClient(
       client: MockClient((request) async {
