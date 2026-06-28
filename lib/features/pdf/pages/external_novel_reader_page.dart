@@ -6,6 +6,7 @@ import '../../habits/data/reading_xp_store.dart';
 import '../../library/data/library_store.dart';
 import '../../library/data/web_content_client.dart';
 import '../../library/models/reading_document.dart';
+import '../../library/utils/reading_time_estimator.dart';
 
 class ExternalNovelReaderPage extends StatefulWidget {
   const ExternalNovelReaderPage({
@@ -27,6 +28,7 @@ class ExternalNovelReaderPage extends StatefulWidget {
 class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage>
     with WidgetsBindingObserver {
   final store = LibraryStore();
+  final readingTimeEstimator = const ReadingTimeEstimator();
   final xpStore = ReadingXpStore();
   final contentClient = const WebContentClient();
   late ReadingDocument document;
@@ -35,6 +37,8 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage>
   late int currentChapterIndex;
   Timer? readingTimer;
   int pendingReadingSeconds = 0;
+  int requiredChapterReadSeconds = LibraryStore.minimumChapterReadSeconds;
+  int currentChapterWordCount = 0;
   bool contentReady = false;
   int contentLoadGeneration = 0;
 
@@ -69,9 +73,9 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage>
   }
 
   int get secondsUntilChapterCounts =>
-      (LibraryStore.minimumChapterReadSeconds - currentChapterReadingSeconds)
-          .clamp(0, LibraryStore.minimumChapterReadSeconds)
-          .toInt();
+    (requiredChapterReadSeconds - currentChapterReadingSeconds)
+        .clamp(0, requiredChapterReadSeconds)
+        .toInt();
 
   @override
   void initState() {
@@ -204,7 +208,8 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage>
                         Text(
                           currentChapterQualified
                               ? 'Counted as read'
-                              : 'Counts as read in $secondsUntilChapterCounts seconds',
+                              : 'Counts as read in $secondsUntilChapterCounts seconds'
+                              '($currentChapterWordCount words)',
                           style:
                               Theme.of(context).textTheme.labelMedium?.copyWith(
                                     color: currentChapterQualified
@@ -294,21 +299,29 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage>
     }
     return content;
   }
+  
+Future<ReadableWebContent> _loadContentAndStartTimer({
+  bool forceRefresh = false,
+}) async {
+  final generation = ++contentLoadGeneration;
+  contentReady = false;
+  _stopReadingTimer();
 
-  Future<ReadableWebContent> _loadContentAndStartTimer({
-    bool forceRefresh = false,
-  }) async {
-    final generation = ++contentLoadGeneration;
-    contentReady = false;
-    _stopReadingTimer();
-    final content = await _loadContent(forceRefresh: forceRefresh);
-    if (!mounted || generation != contentLoadGeneration) {
-      return content;
-    }
-    contentReady = true;
-    _startReadingTimer();
+  final content = await _loadContent(forceRefresh: forceRefresh);
+
+  if (!mounted || generation != contentLoadGeneration) {
     return content;
   }
+
+  currentChapterWordCount = readingTimeEstimator.wordCount(content.text);
+  requiredChapterReadSeconds =
+      readingTimeEstimator.requiredSecondsForText(content.text);
+
+  contentReady = true;
+  _startReadingTimer();
+
+  return content;
+}
 
   void _refresh() {
     _persistCurrentChapterTime();
@@ -350,26 +363,31 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage>
   }
 
   void _openChapterIndex(int index) {
-    _persistCurrentChapterTime();
-    _stopReadingTimer();
-    final chapter = widget.chapters[index];
-    currentChapterIndex = index;
-    pendingReadingSeconds = 0;
-    final updatedDocument = store.recordChapterReadingTime(
-      document.id,
-      chapterUrl: chapter.url,
-      chapterTitle: chapter.title,
-      chapterNumber: index + 1,
-      chapterCount: widget.chapters.length,
-      elapsedSeconds: 0,
-    );
+  _persistCurrentChapterTime();
+  _stopReadingTimer();
 
-    setState(() {
-      document = updatedDocument ?? document;
-      xpProgress = xpStore.load();
-      contentFuture = _loadContentAndStartTimer(forceRefresh: true);
-    });
-  }
+  final chapter = widget.chapters[index];
+
+  currentChapterIndex = index;
+  pendingReadingSeconds = 0;
+  requiredChapterReadSeconds = LibraryStore.minimumChapterReadSeconds;
+  currentChapterWordCount = 0;
+
+  final updatedDocument = store.recordChapterReadingTime(
+    document.id,
+    chapterUrl: chapter.url,
+    chapterTitle: chapter.title,
+    chapterNumber: index + 1,
+    chapterCount: widget.chapters.length,
+    elapsedSeconds: 0,
+  );
+
+  setState(() {
+    document = updatedDocument ?? document;
+    xpProgress = xpStore.load();
+    contentFuture = _loadContentAndStartTimer(forceRefresh: true);
+  });
+}
 
   void _startReadingTimer() {
     if (!hasChapters || !contentReady || readingTimer != null) {
@@ -409,29 +427,33 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage>
   }
 
   void _persistCurrentChapterTime({bool notify = true}) {
-    final chapter = currentChapter;
-    if (chapter == null || pendingReadingSeconds <= 0) {
-      return;
-    }
-
-    final elapsedSeconds = pendingReadingSeconds;
-    pendingReadingSeconds = 0;
-    final previousTotalXp = xpProgress.totalXp;
-    final updatedDocument = store.recordChapterReadingTime(
-      document.id,
-      chapterUrl: chapter.url,
-      chapterTitle: chapter.title,
-      chapterNumber: currentChapterIndex + 1,
-      chapterCount: widget.chapters.length,
-      elapsedSeconds: elapsedSeconds,
-    );
-    document = updatedDocument ?? document;
-    xpProgress = xpStore.load();
-
-    if (notify) {
-      _showXpAward(xpProgress.totalXp - previousTotalXp);
-    }
+  final chapter = currentChapter;
+  if (chapter == null || pendingReadingSeconds <= 0) {
+    return;
   }
+
+  final elapsedSeconds = pendingReadingSeconds;
+  pendingReadingSeconds = 0;
+
+  final previousTotalXp = xpProgress.totalXp;
+
+  final updatedDocument = store.recordChapterReadingTime(
+    document.id,
+    chapterUrl: chapter.url,
+    chapterTitle: chapter.title,
+    chapterNumber: currentChapterIndex + 1,
+    chapterCount: widget.chapters.length,
+    elapsedSeconds: elapsedSeconds,
+    requiredReadSeconds: requiredChapterReadSeconds,
+  );
+
+  document = updatedDocument ?? document;
+  xpProgress = xpStore.load();
+
+  if (notify) {
+    _showXpAward(xpProgress.totalXp - previousTotalXp);
+  }
+}
 
   void _showXpAward(int xpEarned) {
     if (!mounted || xpEarned <= 0) {

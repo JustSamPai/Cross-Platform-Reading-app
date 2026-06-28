@@ -215,6 +215,7 @@ class LibraryStore {
     required int chapterNumber,
     required int chapterCount,
     required int elapsedSeconds,
+    int? requiredReadSeconds,
   }) {
     final docs = documents().toList();
     final index = docs.indexWhere((document) => document.id == id);
@@ -232,8 +233,11 @@ class LibraryStore {
     chapterReadingSeconds[chapterUrl] = updatedChapterSeconds;
 
     final readChapterUrls = {...currentDocument.readChapterUrls};
-    final qualifiedNow = updatedChapterSeconds >= minimumChapterReadSeconds &&
-        readChapterUrls.add(chapterUrl);
+    final secondsRequired = requiredReadSeconds ?? minimumChapterReadSeconds;
+
+    final qualifiedNow =
+      updatedChapterSeconds >= secondsRequired &&
+      readChapterUrls.add(chapterUrl);
 
     docs[index] = currentDocument.copyWith(
       lastReadChapterUrl: chapterUrl,
