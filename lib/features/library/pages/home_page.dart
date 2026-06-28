@@ -334,19 +334,31 @@ class _LibraryDashboardState extends State<_LibraryDashboard> {
   }
 
   Future<void> _importDocument() async {
-    final document = await DocumentImporter.pickDocument();
+    ReadingDocument? document;
+    try {
+      document = await DocumentImporter.pickDocument();
+    } on DocumentImportException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      }
+      return;
+    }
     if (document == null || !mounted) {
       return;
     }
+    final importedDocument = document;
 
-    final documents = LibraryStore().addDocument(document);
+    final documents = LibraryStore().addDocument(importedDocument);
     final storedDocument = documents.firstWhere(
       (stored) =>
-          (document.filePath != null && stored.filePath == document.filePath) ||
-          (document.filePath == null &&
-              stored.title == document.title &&
-              stored.type == document.type),
-      orElse: () => document,
+          (importedDocument.filePath != null &&
+              stored.filePath == importedDocument.filePath) ||
+          (importedDocument.filePath == null &&
+              stored.title == importedDocument.title &&
+              stored.type == importedDocument.type),
+      orElse: () => importedDocument,
     );
 
     if (mounted) {
@@ -499,9 +511,10 @@ class _LibraryDocumentCard extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    _iconFor(document.type),
-                    color: novelTierColor ?? colorScheme.primary,
+                  _LibraryDocumentVisual(
+                    document: document,
+                    fallbackIcon: _iconFor(document.type),
+                    accentColor: novelTierColor ?? colorScheme.primary,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -569,6 +582,47 @@ class _LibraryDocumentCard extends StatelessWidget {
       NovelReadingTier.gold => const Color(0xFFB77900),
       NovelReadingTier.purple => const Color(0xFF7B1FA2),
     };
+  }
+}
+
+class _LibraryDocumentVisual extends StatelessWidget {
+  const _LibraryDocumentVisual({
+    required this.document,
+    required this.fallbackIcon,
+    required this.accentColor,
+  });
+
+  final ReadingDocument document;
+  final IconData fallbackIcon;
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final coverUrl = document.coverUrl;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: ColoredBox(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: SizedBox(
+          width: 52,
+          height: 76,
+          child: coverUrl == null || coverUrl.isEmpty
+              ? Icon(fallbackIcon, color: accentColor)
+              : Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: Image.network(
+                    coverUrl,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.medium,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(fallbackIcon, color: accentColor);
+                    },
+                  ),
+                ),
+        ),
+      ),
+    );
   }
 }
 

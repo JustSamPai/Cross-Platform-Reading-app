@@ -593,9 +593,9 @@ class _SourceEntryGrid extends StatelessWidget {
         final width = constraints.maxWidth;
         final cardWidth = width >= 1040
             ? (width - 36) / 4
-            : width >= 760
+            : width >= 720
                 ? (width - 24) / 3
-                : width >= 520
+                : width >= 340
                     ? (width - 12) / 2
                     : width;
 
@@ -692,7 +692,7 @@ class _SourceEntryCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             AspectRatio(
-              aspectRatio: 3 / 4,
+              aspectRatio: 2 / 3,
               child: _SourceCover(
                 imageUrl: entry.coverUrl,
                 title: entry.title,
@@ -772,13 +772,30 @@ class _SourceCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (imageUrl != null && imageUrl!.isNotEmpty) {
-      return Image.network(
-        imageUrl!,
-        fit: BoxFit.cover,
-        errorBuilder: (context, _, __) {
-          return _BlankCover(title: title);
-        },
+      return ColoredBox(
+        color: colorScheme.surfaceContainerHighest,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Image.network(
+            imageUrl!,
+            width: double.infinity,
+            height: double.infinity,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.medium,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) {
+                return child;
+              }
+              return const Center(child: CircularProgressIndicator());
+            },
+            errorBuilder: (context, _, __) {
+              return _BlankCover(title: title);
+            },
+          ),
+        ),
       );
     }
 

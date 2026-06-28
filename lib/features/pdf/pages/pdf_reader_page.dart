@@ -93,23 +93,35 @@ class _PdfReaderPageState extends State<PdfReaderPage> {
   }
 
   Future<void> _importDocument() async {
-    final document = await DocumentImporter.pickDocument();
+    ReadingDocument? document;
+    try {
+      document = await DocumentImporter.pickDocument();
+    } on DocumentImportException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      }
+      return;
+    }
     if (document == null) {
       return;
     }
+    final importedDocument = document;
 
     if (!mounted) {
       return;
     }
 
-    final updatedDocuments = store.addDocument(document);
+    final updatedDocuments = store.addDocument(importedDocument);
     final storedDocument = updatedDocuments.firstWhere(
       (stored) =>
-          (document.filePath != null && stored.filePath == document.filePath) ||
-          (document.filePath == null &&
-              stored.title == document.title &&
-              stored.type == document.type),
-      orElse: () => document,
+          (importedDocument.filePath != null &&
+              stored.filePath == importedDocument.filePath) ||
+          (importedDocument.filePath == null &&
+              stored.title == importedDocument.title &&
+              stored.type == importedDocument.type),
+      orElse: () => importedDocument,
     );
 
     setState(() => documents = updatedDocuments);

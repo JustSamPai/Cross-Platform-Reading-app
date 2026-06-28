@@ -22,7 +22,7 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final store = LibraryStore();
   late ReadingDocument document;
-  late EpubController epubController;
+  EpubController? epubController;
   int currentChapter = 1;
   int chapterCount = 0;
   double chapterProgress = 0;
@@ -34,10 +34,13 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
     document = widget.document;
     currentChapter = document.lastPageNumber;
     chapterCount = document.pageCount;
-    epubController = EpubController(
-      document: EpubDocument.openData(document.bytes!),
-      epubCfi: document.epubCfi,
-    );
+    final bytes = document.bytes;
+    if (bytes != null && bytes.isNotEmpty) {
+      epubController = EpubController(
+        document: EpubDocument.openData(bytes),
+        epubCfi: document.epubCfi,
+      );
+    }
   }
 
   @override
@@ -48,17 +51,19 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
       pageNumber: currentChapter,
       pageCount: chapterCount,
     );
-    epubController.dispose();
+    epubController?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!document.canOpenInApp) {
+    final controller = epubController;
+    if (!document.canOpenInApp || controller == null) {
       return Scaffold(
         appBar: AppBar(title: Text(document.title)),
-        body: const Center(
-          child: Text('Re-import this EPUB to open the reader.'),
+        body: const _EpubLoadError(
+          message: 'This EPUB has no readable local data. Re-import it from '
+              'Downloads or another on-device folder.',
         ),
       );
     }
@@ -77,7 +82,7 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
       ),
       drawer: Drawer(
         child: SafeArea(
-          child: EpubViewTableOfContents(controller: epubController),
+          child: EpubViewTableOfContents(controller: controller),
         ),
       ),
       body: Column(
@@ -92,7 +97,7 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: EpubViewActualChapter(
-                controller: epubController,
+                controller: controller,
                 builder: (chapterValue) {
                   final title = chapterValue?.chapter?.Title
                       ?.replaceAll('\n', ' ')
@@ -114,7 +119,7 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
           ),
           Expanded(
             child: EpubView(
-              controller: epubController,
+              controller: controller,
               onDocumentLoaded: _handleDocumentLoaded,
               onChapterChanged: _handleChapterChanged,
               onDocumentError: (error) {
@@ -133,6 +138,11 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
                     vertical: 8,
                   ),
                 ),
+                errorBuilder: (context, error) {
+                  return _EpubLoadError(
+                    message: 'Could not parse this EPUB. ${error.toString()}',
+                  );
+                },
                 chapterDividerBuilder: (chapter) => Padding(
                   padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
                   child: Text(
@@ -149,7 +159,16 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
   }
 
   void _handleDocumentLoaded(EpubBook book) {
-    final total = epubController.tableOfContents().length;
+    final controller = epubController;
+    if (controller == null) {
+      return;
+    }
+    var total = 0;
+    try {
+      total = controller.tableOfContents().length;
+    } catch (_) {
+      total = 0;
+    }
     final fallbackTotal = book.Chapters?.length ?? 0;
     final nextCount = total == 0 ? fallbackTotal : total;
 
@@ -189,7 +208,7 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
 
     progressDebounce?.cancel();
     progressDebounce = Timer(const Duration(milliseconds: 500), () {
-      final cfi = epubController.generateEpubCfi();
+      final cfi = epubController?.generateEpubCfi();
       final updatedDocument = store.updateDocumentProgress(
         document.id,
         pageNumber: nextChapter,
@@ -201,6 +220,40 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
         setState(() => document = updatedDocument);
       }
     });
+  }
+}
+
+class _EpubLoadError extends StatelessWidget {
+  const _EpubLoadError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.menu_book_outlined,
+                size: 44,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
