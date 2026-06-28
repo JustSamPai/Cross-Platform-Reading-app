@@ -15,6 +15,7 @@ class LibraryStore {
 
   static const _documentsKey = 'library.documents';
   static const _notesPrefix = 'library.notes.';
+  static const minimumChapterReadSeconds = 30;
 
   final Box<dynamic> _box;
   final ReadingXpStore _readingXpStore;
@@ -124,6 +125,7 @@ class LibraryStore {
       documentId: id,
       pageId: 'page:$pageNumber',
       totalPages: pageCount,
+      pageNumber: pageNumber,
     );
   }
 
@@ -201,7 +203,58 @@ class LibraryStore {
       documentId: id,
       pageId: 'chapter:$chapterUrl',
       totalPages: chapterCount,
+      pageNumber: chapterNumber,
     );
+    return docs[index];
+  }
+
+  ReadingDocument? recordChapterReadingTime(
+    String id, {
+    required String chapterUrl,
+    required String chapterTitle,
+    required int chapterNumber,
+    required int chapterCount,
+    required int elapsedSeconds,
+  }) {
+    final docs = documents().toList();
+    final index = docs.indexWhere((document) => document.id == id);
+    if (index == -1) {
+      return null;
+    }
+
+    final currentDocument = docs[index];
+    final chapterReadingSeconds = {
+      ...currentDocument.chapterReadingSeconds,
+    };
+    final previousChapterSeconds = chapterReadingSeconds[chapterUrl] ?? 0;
+    final addedSeconds = elapsedSeconds.clamp(0, 3600).toInt();
+    final updatedChapterSeconds = previousChapterSeconds + addedSeconds;
+    chapterReadingSeconds[chapterUrl] = updatedChapterSeconds;
+
+    final readChapterUrls = {...currentDocument.readChapterUrls};
+    final qualifiedNow = updatedChapterSeconds >= minimumChapterReadSeconds &&
+        readChapterUrls.add(chapterUrl);
+
+    docs[index] = currentDocument.copyWith(
+      lastReadChapterUrl: chapterUrl,
+      lastReadChapterTitle: chapterTitle,
+      readChapterUrls: readChapterUrls.toList(),
+      lastPageNumber: chapterNumber.clamp(0, chapterCount).toInt(),
+      pageCount: chapterCount,
+      lastOpenedAt: DateTime.now(),
+      readingSeconds: currentDocument.readingSeconds + addedSeconds,
+      chapterReadingSeconds: chapterReadingSeconds,
+    );
+    _saveDocuments(docs);
+
+    if (qualifiedNow) {
+      _readingXpStore.recordPage(
+        documentId: id,
+        pageId: 'chapter:$chapterUrl',
+        totalPages: chapterCount,
+        pageNumber: chapterNumber,
+      );
+    }
     return docs[index];
   }
 

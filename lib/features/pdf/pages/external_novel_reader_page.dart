@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../habits/data/reading_xp_store.dart';
@@ -22,7 +24,8 @@ class ExternalNovelReaderPage extends StatefulWidget {
       _ExternalNovelReaderPageState();
 }
 
-class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
+class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage>
+    with WidgetsBindingObserver {
   final store = LibraryStore();
   final xpStore = ReadingXpStore();
   final contentClient = const WebContentClient();
@@ -30,6 +33,10 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
   late ReadingXpProgress xpProgress;
   late Future<ReadableWebContent> contentFuture;
   late int currentChapterIndex;
+  Timer? readingTimer;
+  int pendingReadingSeconds = 0;
+  bool contentReady = false;
+  int contentLoadGeneration = 0;
 
   bool get hasChapters => widget.chapters.isNotEmpty;
 
@@ -47,23 +54,57 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
   bool get canGoNext =>
       hasChapters && currentChapterIndex < widget.chapters.length - 1;
 
+  bool get currentChapterQualified {
+    final chapter = currentChapter;
+    return chapter != null && document.readChapterUrls.contains(chapter.url);
+  }
+
+  int get currentChapterReadingSeconds {
+    final chapter = currentChapter;
+    if (chapter == null) {
+      return 0;
+    }
+    return (document.chapterReadingSeconds[chapter.url] ?? 0) +
+        pendingReadingSeconds;
+  }
+
+  int get secondsUntilChapterCounts =>
+      (LibraryStore.minimumChapterReadSeconds - currentChapterReadingSeconds)
+          .clamp(0, LibraryStore.minimumChapterReadSeconds)
+          .toInt();
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     currentChapterIndex = widget.initialChapterIndex.clamp(
       0,
       widget.chapters.isEmpty ? 0 : widget.chapters.length - 1,
     );
-    final previousTotalXp = xpStore.load().totalXp;
-    document = _markCurrentChapterRead(widget.document);
+    document = widget.document;
     xpProgress = xpStore.load();
-    contentFuture = _loadContent();
+    contentFuture = _loadContentAndStartTimer();
+    _recordCurrentChapterPosition();
+  }
 
-    final xpEarned = xpProgress.totalXp - previousTotalXp;
-    if (xpEarned > 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showXpAward(xpEarned);
-      });
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopReadingTimer();
+    _persistCurrentChapterTime(notify: false);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startReadingTimer();
+      return;
+    }
+    _stopReadingTimer();
+    _persistCurrentChapterTime();
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -141,9 +182,38 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
                         currentChapter?.title ?? content.title,
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
+                      if (xpProgress.readingTitle != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          xpProgress.readingTitle!,
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelLarge
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.tertiary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ],
                       if (document.sourceName != null) ...[
                         const SizedBox(height: 4),
                         Text(document.sourceName!),
+                      ],
+                      if (hasChapters) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          currentChapterQualified
+                              ? 'Counted as read'
+                              : 'Counts as read in $secondsUntilChapterCounts seconds',
+                          style:
+                              Theme.of(context).textTheme.labelMedium?.copyWith(
+                                    color: currentChapterQualified
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                  ),
+                        ),
                       ],
                       const SizedBox(height: 12),
                       ClipRRect(
@@ -225,9 +295,25 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
     return content;
   }
 
+  Future<ReadableWebContent> _loadContentAndStartTimer({
+    bool forceRefresh = false,
+  }) async {
+    final generation = ++contentLoadGeneration;
+    contentReady = false;
+    _stopReadingTimer();
+    final content = await _loadContent(forceRefresh: forceRefresh);
+    if (!mounted || generation != contentLoadGeneration) {
+      return content;
+    }
+    contentReady = true;
+    _startReadingTimer();
+    return content;
+  }
+
   void _refresh() {
+    _persistCurrentChapterTime();
     setState(() {
-      contentFuture = _loadContent(forceRefresh: true);
+      contentFuture = _loadContentAndStartTimer(forceRefresh: true);
     });
   }
 
@@ -264,23 +350,87 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
   }
 
   void _openChapterIndex(int index) {
+    _persistCurrentChapterTime();
+    _stopReadingTimer();
     final chapter = widget.chapters[index];
-    final previousTotalXp = xpProgress.totalXp;
-    final updatedDocument = store.markChapterRead(
+    currentChapterIndex = index;
+    pendingReadingSeconds = 0;
+    final updatedDocument = store.recordChapterReadingTime(
       document.id,
       chapterUrl: chapter.url,
       chapterTitle: chapter.title,
       chapterNumber: index + 1,
       chapterCount: widget.chapters.length,
+      elapsedSeconds: 0,
     );
 
     setState(() {
-      currentChapterIndex = index;
       document = updatedDocument ?? document;
       xpProgress = xpStore.load();
-      contentFuture = _loadContent(forceRefresh: true);
+      contentFuture = _loadContentAndStartTimer(forceRefresh: true);
     });
-    _showXpAward(xpProgress.totalXp - previousTotalXp);
+  }
+
+  void _startReadingTimer() {
+    if (!hasChapters || !contentReady || readingTimer != null) {
+      return;
+    }
+    readingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      pendingReadingSeconds++;
+      final shouldPersist = pendingReadingSeconds >= 5;
+      if (shouldPersist) {
+        _persistCurrentChapterTime();
+      }
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  void _stopReadingTimer() {
+    readingTimer?.cancel();
+    readingTimer = null;
+  }
+
+  void _recordCurrentChapterPosition() {
+    final chapter = currentChapter;
+    if (chapter == null) {
+      return;
+    }
+    document = store.recordChapterReadingTime(
+          document.id,
+          chapterUrl: chapter.url,
+          chapterTitle: chapter.title,
+          chapterNumber: currentChapterIndex + 1,
+          chapterCount: widget.chapters.length,
+          elapsedSeconds: 0,
+        ) ??
+        document;
+  }
+
+  void _persistCurrentChapterTime({bool notify = true}) {
+    final chapter = currentChapter;
+    if (chapter == null || pendingReadingSeconds <= 0) {
+      return;
+    }
+
+    final elapsedSeconds = pendingReadingSeconds;
+    pendingReadingSeconds = 0;
+    final previousTotalXp = xpProgress.totalXp;
+    final updatedDocument = store.recordChapterReadingTime(
+      document.id,
+      chapterUrl: chapter.url,
+      chapterTitle: chapter.title,
+      chapterNumber: currentChapterIndex + 1,
+      chapterCount: widget.chapters.length,
+      elapsedSeconds: elapsedSeconds,
+    );
+    document = updatedDocument ?? document;
+    xpProgress = xpStore.load();
+
+    if (notify) {
+      _showXpAward(xpProgress.totalXp - previousTotalXp);
+    }
   }
 
   void _showXpAward(int xpEarned) {
@@ -292,22 +442,6 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
       ..showSnackBar(
         SnackBar(content: Text('Chapter read: +$xpEarned XP')),
       );
-  }
-
-  ReadingDocument _markCurrentChapterRead(ReadingDocument currentDocument) {
-    final chapter = currentChapter;
-    if (chapter == null) {
-      return currentDocument;
-    }
-
-    return store.markChapterRead(
-          currentDocument.id,
-          chapterUrl: chapter.url,
-          chapterTitle: chapter.title,
-          chapterNumber: currentChapterIndex + 1,
-          chapterCount: widget.chapters.length,
-        ) ??
-        currentDocument;
   }
 }
 

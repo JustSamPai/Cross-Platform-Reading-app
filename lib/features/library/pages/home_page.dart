@@ -10,12 +10,12 @@ import '../../pdf/pages/book_progress_page.dart';
 import '../../pdf/pages/document_reader_page.dart';
 import '../../pdf/pages/epub_reader_page.dart';
 import '../../pdf/pages/pdf_reader_page.dart';
-import '../../pdf/pages/web_novel_chapters_page.dart';
 import '../data/document_importer.dart';
 import '../data/library_store.dart';
 import '../../quiz/pages/quiz_page.dart';
 import '../../settings/pages/settings_page.dart';
 import '../models/reading_document.dart';
+import 'novel_stats_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -187,7 +187,11 @@ class _LibraryDashboardState extends State<_LibraryDashboard> {
             habits.where((habit) => habit.completedToday).length;
         final totalPagesRead = documents.fold<int>(
           0,
-          (total, document) => total + document.lastPageNumber,
+          (total, document) =>
+              total +
+              (document.type == ReadingDocumentType.webNovel
+                  ? document.readChapterUrls.length
+                  : document.lastPageNumber),
         );
         final inProgressCount = documents.where((document) {
           return document.progress > 0 && document.progress < 1;
@@ -358,8 +362,7 @@ class _LibraryDashboardState extends State<_LibraryDashboard> {
           return switch (document.type) {
             ReadingDocumentType.pdf => DocumentReaderPage(document: document),
             ReadingDocumentType.epub => EpubReaderPage(document: document),
-            ReadingDocumentType.webNovel =>
-              WebNovelChaptersPage(document: document),
+            ReadingDocumentType.webNovel => NovelStatsPage(document: document),
             ReadingDocumentType.book ||
             ReadingDocumentType.other =>
               BookProgressPage(document: document),
@@ -474,9 +477,17 @@ class _LibraryDocumentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final novelTierColor = _novelTierColor(document.novelReadingTier);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      color: novelTierColor?.withValues(alpha: 0.1),
+      shape: novelTierColor == null
+          ? null
+          : RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: novelTierColor, width: 1.5),
+            ),
       child: InkWell(
         onTap: onOpen,
         borderRadius: BorderRadius.circular(8),
@@ -488,7 +499,10 @@ class _LibraryDocumentCard extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(_iconFor(document.type), color: colorScheme.primary),
+                  Icon(
+                    _iconFor(document.type),
+                    color: novelTierColor ?? colorScheme.primary,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -501,6 +515,15 @@ class _LibraryDocumentCard extends StatelessWidget {
                         if (document.author != null) Text(document.author!),
                         Text(
                             '${document.type.label} - ${document.progressLabel}'),
+                        if (document.type == ReadingDocumentType.webNovel &&
+                            document.readChapterUrls.isNotEmpty)
+                          Text(
+                            '${document.readChapterUrls.length} chapters read',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelMedium
+                                ?.copyWith(color: novelTierColor),
+                          ),
                       ],
                     ),
                   ),
@@ -518,6 +541,7 @@ class _LibraryDocumentCard extends StatelessWidget {
                 child: LinearProgressIndicator(
                   minHeight: 8,
                   value: document.progress,
+                  color: novelTierColor,
                 ),
               ),
             ],
@@ -534,6 +558,16 @@ class _LibraryDocumentCard extends StatelessWidget {
       ReadingDocumentType.webNovel => Icons.public,
       ReadingDocumentType.book => Icons.auto_stories_outlined,
       ReadingDocumentType.other => Icons.insert_drive_file_outlined,
+    };
+  }
+
+  Color? _novelTierColor(NovelReadingTier tier) {
+    return switch (tier) {
+      NovelReadingTier.none => null,
+      NovelReadingTier.green => const Color(0xFF2E7D32),
+      NovelReadingTier.blue => const Color(0xFF1565C0),
+      NovelReadingTier.gold => const Color(0xFFB77900),
+      NovelReadingTier.purple => const Color(0xFF7B1FA2),
     };
   }
 }

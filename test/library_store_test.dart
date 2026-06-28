@@ -69,7 +69,7 @@ void main() {
     expect(updatedDocument.progressPercent, 50);
     expect(updatedDocument.lastOpenedAt, isNotNull);
     expect(ReadingXpStore(box: box).load().pagesRead, 12);
-    expect(ReadingXpStore(box: box).load().totalXp, 17);
+    expect(ReadingXpStore(box: box).load().totalXp, 27);
   });
 
   test('persists manual books', () {
@@ -133,5 +133,113 @@ void main() {
     expect(updated.progressPercent, 33);
     expect(store.readingHistory().single.id, updated.id);
     expect(ReadingXpStore(box: box).load().pagesRead, 1);
+  });
+
+  test('assigns saved novel colours from chapters read', () {
+    final novel = ReadingDocument.externalNovel(
+      title: 'Tiered Novel',
+      sourceUrl: 'https://example.com/tiered-novel',
+      sourceName: 'Example Source',
+    );
+
+    expect(
+      novel.copyWith(readChapterUrls: ['chapter-1']).novelReadingTier,
+      NovelReadingTier.green,
+    );
+    expect(
+      novel
+          .copyWith(
+            readChapterUrls: List.generate(10, (index) => 'chapter-$index'),
+          )
+          .novelReadingTier,
+      NovelReadingTier.blue,
+    );
+    expect(
+      novel
+          .copyWith(
+            readChapterUrls: List.generate(50, (index) => 'chapter-$index'),
+          )
+          .novelReadingTier,
+      NovelReadingTier.gold,
+    );
+    expect(
+      novel
+          .copyWith(
+            readChapterUrls: List.generate(100, (index) => 'chapter-$index'),
+          )
+          .novelReadingTier,
+      NovelReadingTier.purple,
+    );
+  });
+
+  test('requires reading time before a source chapter counts', () {
+    final store = LibraryStore(box: box);
+    final novel = store
+        .addDocument(
+          ReadingDocument.externalNovel(
+            title: 'Timed Novel',
+            sourceUrl: 'https://example.com/timed-novel',
+            sourceName: 'Example Source',
+          ),
+        )
+        .first;
+
+    final tooFast = store.recordChapterReadingTime(
+      novel.id,
+      chapterUrl: 'https://example.com/timed-novel/chapter-1',
+      chapterTitle: 'Chapter 1',
+      chapterNumber: 1,
+      chapterCount: 10,
+      elapsedSeconds: 29,
+    )!;
+
+    expect(tooFast.readChapterUrls, isEmpty);
+    expect(tooFast.readingSeconds, 29);
+    expect(ReadingXpStore(box: box).load().pagesRead, 0);
+
+    final qualified = store.recordChapterReadingTime(
+      novel.id,
+      chapterUrl: 'https://example.com/timed-novel/chapter-1',
+      chapterTitle: 'Chapter 1',
+      chapterNumber: 1,
+      chapterCount: 10,
+      elapsedSeconds: 1,
+    )!;
+
+    expect(qualified.readChapterUrls, hasLength(1));
+    expect(qualified.readingSeconds, 30);
+    expect(ReadingXpStore(box: box).load().pagesRead, 1);
+
+    final spammed = store.recordChapterReadingTime(
+      novel.id,
+      chapterUrl: 'https://example.com/timed-novel/chapter-2',
+      chapterTitle: 'Chapter 2',
+      chapterNumber: 2,
+      chapterCount: 10,
+      elapsedSeconds: 0,
+    )!;
+
+    expect(spammed.lastPageNumber, 2);
+    expect(spammed.readChapterUrls, hasLength(1));
+    expect(spammed.progressPercent, 10);
+    expect(ReadingXpStore(box: box).load().pagesRead, 1);
+  });
+
+  test('calculates reading time remaining for the next novel tier', () {
+    final novel = ReadingDocument.externalNovel(
+      title: 'Progress Novel',
+      sourceUrl: 'https://example.com/progress-novel',
+      sourceName: 'Example Source',
+    ).copyWith(
+      readChapterUrls: ['chapter-1'],
+      chapterReadingSeconds: {'chapter-2': 20},
+    );
+
+    expect(novel.novelReadingTier, NovelReadingTier.green);
+    expect(novel.chaptersToNextNovelTier, 9);
+    expect(
+      novel.readingSecondsToNextNovelTier(secondsPerChapter: 30),
+      250,
+    );
   });
 }

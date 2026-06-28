@@ -6,7 +6,8 @@ class ReadingXpStore {
   ReadingXpStore({Box<dynamic>? box}) : _box = box ?? ReadingStorage.box;
 
   static const xpPerPage = 1;
-  static const tenPageBonusXp = 5;
+  static const fifthPageBonusXp = 5;
+  static const tenPageBonusXp = 10;
   static const bookCompletionBonusXp = 25;
 
   static const _currentXpKey = 'readingXp.currentXp';
@@ -14,6 +15,7 @@ class ReadingXpStore {
   static const _xpNeededKey = 'readingXp.xpNeededForNextLevel';
   static const _totalXpKey = 'readingXp.totalXp';
   static const _pagesReadKey = 'readingXp.pagesRead';
+  static const _fifthPageBonusesKey = 'readingXp.fifthPageBonuses';
   static const _tenPageBonusesKey = 'readingXp.tenPageBonuses';
   static const _completedBooksKey = 'readingXp.completedBooks';
   static const _documentPagesPrefix = 'readingXp.documentPages.';
@@ -30,6 +32,7 @@ class ReadingXpStore {
       ),
       totalXp: _readInt(_totalXpKey),
       pagesRead: _readInt(_pagesReadKey),
+      fifthPageBonuses: _readInt(_fifthPageBonusesKey),
       tenPageBonuses: _readInt(_tenPageBonusesKey),
       completedBookIds: _readStringSet(_completedBooksKey),
     );
@@ -45,12 +48,12 @@ class ReadingXpStore {
     }
 
     final cappedPages = completedPages.clamp(0, totalPages).toInt();
-    final pageIds = {
-      for (var page = 1; page <= cappedPages; page++) 'page:$page',
+    final pages = {
+      for (var page = 1; page <= cappedPages; page++) 'page:$page': page,
     };
     return _recordPages(
       documentId: documentId,
-      pageIds: pageIds,
+      pages: pages,
       totalPages: totalPages,
     );
   }
@@ -59,6 +62,7 @@ class ReadingXpStore {
     required String documentId,
     required String pageId,
     required int totalPages,
+    int? pageNumber,
   }) {
     final trimmedPageId = pageId.trim();
     if (trimmedPageId.isEmpty || totalPages <= 0) {
@@ -67,23 +71,32 @@ class ReadingXpStore {
 
     return _recordPages(
       documentId: documentId,
-      pageIds: {trimmedPageId},
+      pages: {trimmedPageId: pageNumber},
       totalPages: totalPages,
     );
   }
 
   ReadingXpReward _recordPages({
     required String documentId,
-    required Set<String> pageIds,
+    required Map<String, int?> pages,
     required int totalPages,
   }) {
     final storedPages = _readStringSet(_documentPagesKey(documentId));
-    final updatedPages = {...storedPages, ...pageIds};
+    final newPages = Map<String, int?>.from(pages)
+      ..removeWhere((pageId, pageNumber) => storedPages.contains(pageId));
+    final updatedPages = {...storedPages, ...pages.keys};
     final newlyReadPages = updatedPages.length - storedPages.length;
     final previousProgress = load();
     final nextPagesRead = previousProgress.pagesRead + newlyReadPages;
-    final newTenPageBonuses =
-        (nextPagesRead ~/ 10) - (previousProgress.pagesRead ~/ 10);
+    final newTenPageBonuses = newPages.values.where((pageNumber) {
+      return pageNumber != null && pageNumber > 0 && pageNumber % 10 == 0;
+    }).length;
+    final newFifthPageBonuses = newPages.values.where((pageNumber) {
+      return pageNumber != null &&
+          pageNumber > 0 &&
+          pageNumber % 5 == 0 &&
+          pageNumber % 10 != 0;
+    }).length;
 
     final completedBookIds = {...previousProgress.completedBookIds};
     final completedNow = totalPages > 0 &&
@@ -91,7 +104,8 @@ class ReadingXpStore {
         completedBookIds.add(documentId);
 
     final pageXp = newlyReadPages * xpPerPage;
-    final milestoneXp = newTenPageBonuses * tenPageBonusXp;
+    final milestoneXp = (newFifthPageBonuses * fifthPageBonusXp) +
+        (newTenPageBonuses * tenPageBonusXp);
     final completionXp = completedNow ? bookCompletionBonusXp : 0;
     final xpEarned = pageXp + milestoneXp + completionXp;
 
@@ -103,6 +117,12 @@ class ReadingXpStore {
       _box.put(
         _tenPageBonusesKey,
         previousProgress.tenPageBonuses + newTenPageBonuses,
+      );
+    }
+    if (newFifthPageBonuses > 0) {
+      _box.put(
+        _fifthPageBonusesKey,
+        previousProgress.fifthPageBonuses + newFifthPageBonuses,
       );
     }
     if (completedNow) {
@@ -173,6 +193,7 @@ class ReadingXpProgress {
     required this.xpNeededForNextLevel,
     required this.totalXp,
     required this.pagesRead,
+    required this.fifthPageBonuses,
     required this.tenPageBonuses,
     required this.completedBookIds,
   });
@@ -182,10 +203,13 @@ class ReadingXpProgress {
   final int xpNeededForNextLevel;
   final int totalXp;
   final int pagesRead;
+  final int fifthPageBonuses;
   final int tenPageBonuses;
   final Set<String> completedBookIds;
 
   int get completedBooks => completedBookIds.length;
+
+  String? get readingTitle => pagesRead >= 100 ? 'Fan' : null;
 
   double get levelProgress {
     if (xpNeededForNextLevel <= 0) {

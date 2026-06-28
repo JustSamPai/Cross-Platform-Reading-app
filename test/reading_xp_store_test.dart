@@ -22,7 +22,7 @@ void main() {
     await tempDir.delete(recursive: true);
   });
 
-  test('awards page XP and a bonus for every ten pages', () {
+  test('awards larger bonuses on every fifth and tenth page', () {
     final reward = store.recordPagesThrough(
       documentId: 'book-1',
       completedPages: 10,
@@ -30,10 +30,12 @@ void main() {
     );
 
     expect(reward.pageXp, 10);
-    expect(reward.milestoneXp, 5);
+    expect(reward.milestoneXp, 15);
     expect(reward.completionXp, 0);
-    expect(reward.xpEarned, 15);
+    expect(reward.xpEarned, 25);
     expect(store.load().pagesRead, 10);
+    expect(store.load().fifthPageBonuses, 1);
+    expect(store.load().tenPageBonuses, 1);
   });
 
   test('does not award XP twice for the same pages', () {
@@ -50,7 +52,7 @@ void main() {
     );
 
     expect(repeatedReward.xpEarned, 0);
-    expect(store.load().totalXp, 15);
+    expect(store.load().totalXp, 25);
   });
 
   test('awards a completion bonus and increases the reading level', () {
@@ -61,11 +63,12 @@ void main() {
     );
 
     expect(reward.pageXp, 100);
-    expect(reward.milestoneXp, 50);
+    expect(reward.milestoneXp, 150);
     expect(reward.completionXp, 25);
-    expect(reward.progress.currentLevel, 2);
-    expect(reward.progress.currentXp, 75);
+    expect(reward.progress.currentLevel, 3);
+    expect(reward.progress.currentXp, 25);
     expect(reward.progress.completedBooks, 1);
+    expect(reward.progress.readingTitle, 'Fan');
   });
 
   test('counts unique web chapters and rewards being caught up', () {
@@ -73,16 +76,19 @@ void main() {
       documentId: 'novel-1',
       pageId: 'chapter-1',
       totalPages: 2,
+      pageNumber: 1,
     );
     final reward = store.recordPage(
       documentId: 'novel-1',
       pageId: 'chapter-2',
       totalPages: 2,
+      pageNumber: 2,
     );
     final repeatedReward = store.recordPage(
       documentId: 'novel-1',
       pageId: 'chapter-2',
       totalPages: 2,
+      pageNumber: 2,
     );
 
     expect(reward.completionXp, 25);

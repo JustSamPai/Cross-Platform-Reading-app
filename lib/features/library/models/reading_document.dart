@@ -29,6 +29,14 @@ enum ReadingDocumentType {
   }
 }
 
+enum NovelReadingTier {
+  none,
+  green,
+  blue,
+  gold,
+  purple,
+}
+
 class ReadingDocument {
   const ReadingDocument({
     required this.id,
@@ -49,6 +57,8 @@ class ReadingDocument {
     this.lastReadChapterUrl,
     this.lastReadChapterTitle,
     this.readChapterUrls = const [],
+    this.readingSeconds = 0,
+    this.chapterReadingSeconds = const {},
   });
 
   final String id;
@@ -69,6 +79,8 @@ class ReadingDocument {
   final String? lastReadChapterUrl;
   final String? lastReadChapterTitle;
   final List<String> readChapterUrls;
+  final int readingSeconds;
+  final Map<String, int> chapterReadingSeconds;
 
   bool get canOpenInApp =>
       (bytes != null &&
@@ -82,10 +94,70 @@ class ReadingDocument {
     if (pageCount <= 0) {
       return 0;
     }
+    if (type == ReadingDocumentType.webNovel && _tracksWebChapters) {
+      return (readChapterUrls.length / pageCount).clamp(0, 1).toDouble();
+    }
     return (lastPageNumber / pageCount).clamp(0, 1).toDouble();
   }
 
   int get progressPercent => (progress * 100).round();
+
+  NovelReadingTier get novelReadingTier {
+    if (type != ReadingDocumentType.webNovel || readChapterUrls.isEmpty) {
+      return NovelReadingTier.none;
+    }
+
+    final chaptersRead = readChapterUrls.length;
+    if (chaptersRead >= 100) {
+      return NovelReadingTier.purple;
+    }
+    if (chaptersRead >= 50) {
+      return NovelReadingTier.gold;
+    }
+    if (chaptersRead >= 10) {
+      return NovelReadingTier.blue;
+    }
+    return NovelReadingTier.green;
+  }
+
+  int? get nextNovelTierChapterTarget {
+    return switch (novelReadingTier) {
+      NovelReadingTier.none => 1,
+      NovelReadingTier.green => 10,
+      NovelReadingTier.blue => 50,
+      NovelReadingTier.gold => 100,
+      NovelReadingTier.purple => null,
+    };
+  }
+
+  int get chaptersToNextNovelTier {
+    final target = nextNovelTierChapterTarget;
+    if (target == null) {
+      return 0;
+    }
+    return (target - readChapterUrls.length).clamp(0, target).toInt();
+  }
+
+  int readingSecondsToNextNovelTier({required int secondsPerChapter}) {
+    final chaptersNeeded = chaptersToNextNovelTier;
+    if (chaptersNeeded == 0) {
+      return 0;
+    }
+
+    final partialChapterSeconds = chapterReadingSeconds.entries
+        .where((entry) => !readChapterUrls.contains(entry.key))
+        .map((entry) => entry.value.clamp(0, secondsPerChapter).toInt())
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+    var remainingSeconds = 0;
+    for (var index = 0; index < chaptersNeeded; index++) {
+      final accumulated = index < partialChapterSeconds.length
+          ? partialChapterSeconds[index]
+          : 0;
+      remainingSeconds += secondsPerChapter - accumulated;
+    }
+    return remainingSeconds;
+  }
 
   String get progressLabel {
     if (pageCount <= 0) {
@@ -97,12 +169,19 @@ class ReadingDocument {
       };
     }
 
+    if (type == ReadingDocumentType.webNovel && _tracksWebChapters) {
+      return '${readChapterUrls.length} of $pageCount chapters read';
+    }
+
     if (type == ReadingDocumentType.webNovel && pageCount == 1) {
       return lastPageNumber >= 1 ? 'Read' : 'Unread';
     }
 
     return 'Page $lastPageNumber of $pageCount';
   }
+
+  bool get _tracksWebChapters =>
+      lastReadChapterUrl != null || readChapterUrls.isNotEmpty || pageCount > 1;
 
   ReadingDocument copyWith({
     String? id,
@@ -123,6 +202,8 @@ class ReadingDocument {
     String? lastReadChapterUrl,
     String? lastReadChapterTitle,
     List<String>? readChapterUrls,
+    int? readingSeconds,
+    Map<String, int>? chapterReadingSeconds,
   }) {
     return ReadingDocument(
       id: id ?? this.id,
@@ -143,6 +224,9 @@ class ReadingDocument {
       lastReadChapterUrl: lastReadChapterUrl ?? this.lastReadChapterUrl,
       lastReadChapterTitle: lastReadChapterTitle ?? this.lastReadChapterTitle,
       readChapterUrls: readChapterUrls ?? this.readChapterUrls,
+      readingSeconds: readingSeconds ?? this.readingSeconds,
+      chapterReadingSeconds:
+          chapterReadingSeconds ?? this.chapterReadingSeconds,
     );
   }
 
@@ -166,6 +250,8 @@ class ReadingDocument {
       'lastReadChapterUrl': lastReadChapterUrl,
       'lastReadChapterTitle': lastReadChapterTitle,
       'readChapterUrls': readChapterUrls,
+      'readingSeconds': readingSeconds,
+      'chapterReadingSeconds': chapterReadingSeconds,
     };
   }
 
@@ -202,6 +288,15 @@ class ReadingDocument {
       readChapterUrls:
           (map['readChapterUrls'] as List?)?.whereType<String>().toList() ??
               const [],
+      readingSeconds: (map['readingSeconds'] as num?)?.toInt() ?? 0,
+      chapterReadingSeconds:
+          (map['chapterReadingSeconds'] as Map?)?.map<String, int>(
+                (key, value) => MapEntry(
+                  key.toString(),
+                  (value as num?)?.toInt() ?? 0,
+                ),
+              ) ??
+              const {},
     );
   }
 
