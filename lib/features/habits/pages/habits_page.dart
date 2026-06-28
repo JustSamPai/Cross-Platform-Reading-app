@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
+import '../../../core/storage/reading_storage.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../data/reading_habit_store.dart';
 import '../data/reading_xp_store.dart';
@@ -27,7 +29,6 @@ class _HabitsPageState extends State<HabitsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final xpProgress = xpStore.load();
     final completedCount = habits.where((habit) => habit.completedToday).length;
     final plannedMinutes = habits.fold<int>(
       0,
@@ -60,7 +61,12 @@ class _HabitsPageState extends State<HabitsPage> {
             plannedMinutes: plannedMinutes,
           ),
           const SizedBox(height: 12),
-          _ReadingXpCard(progress: xpProgress),
+          ValueListenableBuilder<Box<dynamic>>(
+            valueListenable: ReadingStorage.box.listenable(),
+            builder: (context, box, child) {
+              return _ReadingXpCard(progress: xpStore.load());
+            },
+          ),
           const SizedBox(height: 12),
           HabitHeatMap(
             dataset: heatMapDataset,

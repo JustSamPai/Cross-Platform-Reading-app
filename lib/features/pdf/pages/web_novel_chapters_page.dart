@@ -179,16 +179,6 @@ class _WebNovelChaptersPageState extends State<WebNovelChaptersPage> {
     WebChapterEntry chapter,
   ) async {
     final index = chapters.indexOf(chapter);
-    final updatedDocument = store.markChapterRead(
-      document.id,
-      chapterUrl: chapter.url,
-      chapterTitle: chapter.title,
-      chapterNumber: index + 1,
-      chapterCount: chapters.length,
-    );
-    if (updatedDocument != null) {
-      document = updatedDocument;
-    }
 
     await Navigator.push(
       context,

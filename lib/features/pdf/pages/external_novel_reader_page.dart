@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../habits/data/reading_xp_store.dart';
 import '../../library/data/library_store.dart';
 import '../../library/data/web_content_client.dart';
 import '../../library/models/reading_document.dart';
@@ -23,8 +24,10 @@ class ExternalNovelReaderPage extends StatefulWidget {
 
 class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
   final store = LibraryStore();
+  final xpStore = ReadingXpStore();
   final contentClient = const WebContentClient();
   late ReadingDocument document;
+  late ReadingXpProgress xpProgress;
   late Future<ReadableWebContent> contentFuture;
   late int currentChapterIndex;
 
@@ -51,8 +54,17 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
       0,
       widget.chapters.isEmpty ? 0 : widget.chapters.length - 1,
     );
+    final previousTotalXp = xpStore.load().totalXp;
     document = _markCurrentChapterRead(widget.document);
+    xpProgress = xpStore.load();
     contentFuture = _loadContent();
+
+    final xpEarned = xpProgress.totalXp - previousTotalXp;
+    if (xpEarned > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showXpAward(xpEarned);
+      });
+    }
   }
 
   @override
@@ -61,6 +73,7 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
       appBar: AppBar(
         title: Text(document.title),
         actions: [
+          _ReadingXpBadge(progress: xpProgress),
           IconButton(
             tooltip: 'Refresh',
             onPressed: _refresh,
@@ -219,6 +232,7 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
   }
 
   void _toggleRead() {
+    final previousTotalXp = xpProgress.totalXp;
     final updatedDocument = store.updateDocumentProgress(
       document.id,
       pageNumber: document.progress >= 1 ? 0 : 1,
@@ -230,7 +244,9 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
 
     setState(() {
       document = updatedDocument;
+      xpProgress = xpStore.load();
     });
+    _showXpAward(xpProgress.totalXp - previousTotalXp);
   }
 
   void _previousChapter() {
@@ -249,6 +265,7 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
 
   void _openChapterIndex(int index) {
     final chapter = widget.chapters[index];
+    final previousTotalXp = xpProgress.totalXp;
     final updatedDocument = store.markChapterRead(
       document.id,
       chapterUrl: chapter.url,
@@ -260,8 +277,21 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
     setState(() {
       currentChapterIndex = index;
       document = updatedDocument ?? document;
+      xpProgress = xpStore.load();
       contentFuture = _loadContent(forceRefresh: true);
     });
+    _showXpAward(xpProgress.totalXp - previousTotalXp);
+  }
+
+  void _showXpAward(int xpEarned) {
+    if (!mounted || xpEarned <= 0) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text('Chapter read: +$xpEarned XP')),
+      );
   }
 
   ReadingDocument _markCurrentChapterRead(ReadingDocument currentDocument) {
@@ -278,6 +308,28 @@ class _ExternalNovelReaderPageState extends State<ExternalNovelReaderPage> {
           chapterCount: widget.chapters.length,
         ) ??
         currentDocument;
+  }
+}
+
+class _ReadingXpBadge extends StatelessWidget {
+  const _ReadingXpBadge({required this.progress});
+
+  final ReadingXpProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Reading level ${progress.currentLevel}',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Center(
+          child: Text(
+            '${progress.totalXp} XP',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+        ),
+      ),
+    );
   }
 }
 
