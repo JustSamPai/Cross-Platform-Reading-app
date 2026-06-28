@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/widgets/page_frame.dart';
 import '../data/reading_habit_store.dart';
+import '../data/reading_xp_store.dart';
 import '../models/reading_habit.dart';
 import '../widgets/habit_heat_map.dart';
 
@@ -14,6 +15,7 @@ class HabitsPage extends StatefulWidget {
 
 class _HabitsPageState extends State<HabitsPage> {
   final store = ReadingHabitStore();
+  final xpStore = ReadingXpStore();
   List<ReadingHabit> habits = const [];
   Map<DateTime, int> heatMapDataset = const {};
 
@@ -25,6 +27,7 @@ class _HabitsPageState extends State<HabitsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final xpProgress = xpStore.load();
     final completedCount = habits.where((habit) => habit.completedToday).length;
     final plannedMinutes = habits.fold<int>(
       0,
@@ -56,6 +59,8 @@ class _HabitsPageState extends State<HabitsPage> {
             habitCount: habits.length,
             plannedMinutes: plannedMinutes,
           ),
+          const SizedBox(height: 12),
+          _ReadingXpCard(progress: xpProgress),
           const SizedBox(height: 12),
           HabitHeatMap(
             dataset: heatMapDataset,
@@ -174,6 +179,59 @@ class _HabitsPageState extends State<HabitsPage> {
           : store.updateHabit(index, habitName, targetMinutes);
       heatMapDataset = store.heatMapDataset();
     });
+  }
+}
+
+class _ReadingXpCard extends StatelessWidget {
+  const _ReadingXpCard({required this.progress});
+
+  final ReadingXpProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.auto_awesome, color: colorScheme.tertiary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Reading level ${progress.currentLevel}',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                Text(
+                  '${progress.currentXp} / '
+                  '${progress.xpNeededForNextLevel} XP',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                minHeight: 8,
+                value: progress.levelProgress,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '${progress.pagesRead} pages read  |  '
+              '${progress.completedBooks} books completed  |  '
+              '${progress.totalXp} total XP',
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

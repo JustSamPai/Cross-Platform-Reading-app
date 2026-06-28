@@ -3,16 +3,21 @@ import 'dart:typed_data';
 import 'package:hive/hive.dart';
 
 import '../../../core/storage/reading_storage.dart';
+import '../../habits/data/reading_xp_store.dart';
 import '../models/document_note.dart';
 import '../models/reading_document.dart';
 
 class LibraryStore {
-  LibraryStore({Box<dynamic>? box}) : _box = box ?? ReadingStorage.box;
+  LibraryStore({Box<dynamic>? box, ReadingXpStore? readingXpStore})
+      : _box = box ?? ReadingStorage.box,
+        _readingXpStore =
+            readingXpStore ?? ReadingXpStore(box: box ?? ReadingStorage.box);
 
   static const _documentsKey = 'library.documents';
   static const _notesPrefix = 'library.notes.';
 
   final Box<dynamic> _box;
+  final ReadingXpStore _readingXpStore;
 
   List<ReadingDocument> documents() {
     final raw = _box.get(_documentsKey);
@@ -82,6 +87,7 @@ class LibraryStore {
     required int pageNumber,
     int? pageCount,
     String? epubCfi,
+    bool awardReadingXp = true,
   }) {
     final docs = documents().toList();
     final index = docs.indexWhere((document) => document.id == id);
@@ -96,7 +102,29 @@ class LibraryStore {
       epubCfi: epubCfi,
     );
     _saveDocuments(docs);
+    if (awardReadingXp) {
+      _readingXpStore.recordPagesThrough(
+        documentId: id,
+        completedPages: pageNumber,
+        totalPages: docs[index].pageCount,
+      );
+    }
     return docs[index];
+  }
+
+  void markDocumentPageRead(
+    String id, {
+    required int pageNumber,
+    required int pageCount,
+  }) {
+    if (pageNumber <= 0 || pageCount <= 0) {
+      return;
+    }
+    _readingXpStore.recordPage(
+      documentId: id,
+      pageId: 'page:$pageNumber',
+      totalPages: pageCount,
+    );
   }
 
   ReadingDocument? updateManualBookProgress(
@@ -116,6 +144,11 @@ class LibraryStore {
       lastOpenedAt: DateTime.now(),
     );
     _saveDocuments(docs);
+    _readingXpStore.recordPagesThrough(
+      documentId: id,
+      completedPages: docs[index].lastPageNumber,
+      totalPages: totalPages,
+    );
     return docs[index];
   }
 
@@ -164,6 +197,11 @@ class LibraryStore {
       lastOpenedAt: DateTime.now(),
     );
     _saveDocuments(docs);
+    _readingXpStore.recordPage(
+      documentId: id,
+      pageId: 'chapter:$chapterUrl',
+      totalPages: chapterCount,
+    );
     return docs[index];
   }
 

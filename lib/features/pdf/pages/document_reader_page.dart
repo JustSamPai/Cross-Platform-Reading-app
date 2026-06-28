@@ -55,6 +55,11 @@ class _DocumentReaderPageState extends State<DocumentReaderPage> {
   @override
   void dispose() {
     saveDebounce?.cancel();
+    store.markDocumentPageRead(
+      document.id,
+      pageNumber: currentPage,
+      pageCount: pageCount,
+    );
     searchResult.removeListener(_handleSearchResultChanged);
     searchResult.clear();
     searchController.dispose();
@@ -231,6 +236,7 @@ class _DocumentReaderPageState extends State<DocumentReaderPage> {
             document.id,
             pageNumber: loadedPage,
             pageCount: totalPages,
+            awardReadingXp: false,
           ) ??
           document.copyWith(pageCount: totalPages);
       pageCount = totalPages;
@@ -244,10 +250,18 @@ class _DocumentReaderPageState extends State<DocumentReaderPage> {
   }
 
   void _handlePageChanged(PdfPageChangedDetails details) {
+    if (details.newPageNumber != currentPage) {
+      store.markDocumentPageRead(
+        document.id,
+        pageNumber: currentPage,
+        pageCount: pageCount,
+      );
+    }
     final updatedDocument = store.updateDocumentProgress(
       document.id,
       pageNumber: details.newPageNumber,
       pageCount: pageCount,
+      awardReadingXp: false,
     );
 
     setState(() {

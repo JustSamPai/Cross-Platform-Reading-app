@@ -43,6 +43,11 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
   @override
   void dispose() {
     progressDebounce?.cancel();
+    store.markDocumentPageRead(
+      document.id,
+      pageNumber: currentChapter,
+      pageCount: chapterCount,
+    );
     epubController.dispose();
     super.dispose();
   }
@@ -155,6 +160,7 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
             pageNumber: currentChapter,
             pageCount: nextCount,
             epubCfi: document.epubCfi,
+            awardReadingXp: false,
           ) ??
           document.copyWith(pageCount: nextCount);
     });
@@ -167,6 +173,14 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
 
     final nextChapter = value.chapterNumber <= 0 ? 1 : value.chapterNumber;
     final nextProgress = value.progress.clamp(0, 100).toDouble();
+
+    if (nextChapter != currentChapter) {
+      store.markDocumentPageRead(
+        document.id,
+        pageNumber: currentChapter,
+        pageCount: chapterCount,
+      );
+    }
 
     setState(() {
       currentChapter = nextChapter;
@@ -181,6 +195,7 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
         pageNumber: nextChapter,
         pageCount: chapterCount,
         epubCfi: cfi,
+        awardReadingXp: false,
       );
       if (updatedDocument != null && mounted) {
         setState(() => document = updatedDocument);

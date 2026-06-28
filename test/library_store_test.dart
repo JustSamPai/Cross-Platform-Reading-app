@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_reading_portfolio_app/core/storage/reading_storage.dart';
+import 'package:flutter_reading_portfolio_app/features/habits/data/reading_xp_store.dart';
 import 'package:flutter_reading_portfolio_app/features/library/data/library_store.dart';
 import 'package:flutter_reading_portfolio_app/features/library/models/document_note.dart';
 import 'package:flutter_reading_portfolio_app/features/library/models/reading_document.dart';
@@ -67,6 +68,8 @@ void main() {
     expect(updatedDocument.pageCount, 24);
     expect(updatedDocument.progressPercent, 50);
     expect(updatedDocument.lastOpenedAt, isNotNull);
+    expect(ReadingXpStore(box: box).load().pagesRead, 12);
+    expect(ReadingXpStore(box: box).load().totalXp, 17);
   });
 
   test('persists manual books', () {
@@ -129,5 +132,6 @@ void main() {
         contains('https://example.com/novel/chapter-1'));
     expect(updated.progressPercent, 33);
     expect(store.readingHistory().single.id, updated.id);
+    expect(ReadingXpStore(box: box).load().pagesRead, 1);
   });
 }
